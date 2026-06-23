@@ -2,15 +2,15 @@ import { useEffect, useRef, useState } from "react";
 import { Recent } from "../lib/settings";
 
 interface MenuBarProps {
-  fileName: string;
-  dirty: boolean;
   aiOpen: boolean;
+  chaptersOpen: boolean;
   recents: Recent[];
   onOpen: () => void;
   onSave: () => void;
   onSaveAs: () => void;
   onNew: () => void;
   onToggleAi: () => void;
+  onToggleChapters: () => void;
   onOpenRecent: (path: string) => void;
   onOpenSettings: () => void;
 }
@@ -54,15 +54,15 @@ function RecentsMenu({ recents, onPick }: { recents: Recent[]; onPick: (path: st
 }
 
 export function MenuBar({
-  fileName,
-  dirty,
   aiOpen,
+  chaptersOpen,
   recents,
   onOpen,
   onSave,
   onSaveAs,
   onNew,
   onToggleAi,
+  onToggleChapters,
   onOpenRecent,
   onOpenSettings,
 }: MenuBarProps) {
@@ -71,7 +71,7 @@ export function MenuBar({
       <span className="brand">LocalOffice</span>
       <div className="tb-sep" />
       <div className="tb-group">
-        <button className="tb-btn" onClick={onNew} title="Novo (Ctrl+N)">Novo</button>
+        <button className="tb-btn" onClick={onNew} title="Nova aba (Ctrl+T / Ctrl+N)">Novo</button>
         <button className="tb-btn" onClick={onOpen} title="Abrir (Ctrl+O)">Abrir</button>
         <RecentsMenu recents={recents} onPick={onOpenRecent} />
         <button className="tb-btn" onClick={onSave} title="Salvar (Ctrl+S)">Salvar</button>
@@ -80,11 +80,7 @@ export function MenuBar({
 
       <div className="tb-spacer" />
 
-      <div className="tb-filename" title={fileName}>
-        {dirty ? "● " : ""}
-        {fileName}
-      </div>
-      <div className="tb-sep" />
+      <button className={"tb-btn" + (chaptersOpen ? " is-active" : "")} onClick={onToggleChapters} title="Capítulos (outline)">☰ Capítulos</button>
       <button className={"tb-btn" + (aiOpen ? " is-active" : "")} onClick={onToggleAi} title="Painel de IA local">✦ IA</button>
       <button className="tb-btn" onClick={onOpenSettings} title="Configurações">⚙</button>
     </div>

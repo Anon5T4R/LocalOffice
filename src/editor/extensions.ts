@@ -12,6 +12,7 @@ import { Color } from "@tiptap/extension-color";
 import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
 import { SlashCommand } from "./slash/SlashCommand";
+import { SearchExtension } from "./search/SearchExtension";
 
 export function buildExtensions() {
   return [
@@ -34,5 +35,6 @@ export function buildExtensions() {
     TaskList,
     TaskItem.configure({ nested: true }),
     SlashCommand,
+    SearchExtension,
   ];
 }

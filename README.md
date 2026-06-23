@@ -40,12 +40,19 @@ Pré-requisitos: **Rust** (toolchain MSVC no Windows), **Node 18+**, e as
 npm install
 
 # 2. baixar os binários nativos (não versionados; ~260MB no total)
+#    Windows:
 powershell -ExecutionPolicy Bypass -File scripts/fetch-pandoc.ps1
 powershell -ExecutionPolicy Bypass -File scripts/fetch-llama.ps1
+#    Linux:
+bash scripts/fetch-pandoc.sh && bash scripts/fetch-llama.sh
 
 # 3. rodar
 npm run tauri dev
 ```
+
+> **Linux**: instale as dependências do Tauri (`libwebkit2gtk-4.1-dev`, `librsvg2-dev`, `patchelf`, etc.)
+> e use os scripts `.sh`. O app é cross-platform; o `npm run tauri build` gera `.deb`/`.AppImage`.
+> Releases automáticas para Windows + Linux saem via GitHub Actions (`.github/workflows/release.yml`) ao publicar uma tag.
 
 Para gerar o instalável:
 

@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command};
 use std::sync::Mutex;
 use std::time::Duration;
-use tauri::{Manager, State};
+use tauri::{Emitter, Manager, State};
 use tauri_plugin_shell::ShellExt;
 
 // ---------------------------------------------------------------------------
@@ -161,21 +161,25 @@ fn list_models(dir: String) -> Result<Vec<ModelInfo>, String> {
     Ok(out)
 }
 
-/// Locate the bundled llama-server.exe.
-/// Dev: cwd/binaries/llama. Prod: Tauri resource dir (resources/binaries/llama).
+/// Platform-specific name of the llama.cpp server binary.
+const LLAMA_SERVER_BIN: &str = if cfg!(windows) { "llama-server.exe" } else { "llama-server" };
+
+/// Locate the bundled llama-server.
+/// Dev: cwd/binaries/llama. Prod: Tauri resource dir.
 fn resolve_llama_server(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let rel = format!("binaries/llama/{}", LLAMA_SERVER_BIN);
     let mut candidates: Vec<PathBuf> = Vec::new();
     if let Ok(cwd) = std::env::current_dir() {
-        candidates.push(cwd.join("binaries/llama/llama-server.exe"));
+        candidates.push(cwd.join(&rel));
     }
     if let Ok(res) = app.path().resource_dir() {
-        candidates.push(res.join("binaries/llama/llama-server.exe"));
-        candidates.push(res.join("llama/llama-server.exe"));
+        candidates.push(res.join(&rel));
+        candidates.push(res.join(format!("llama/{}", LLAMA_SERVER_BIN)));
     }
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
-            candidates.push(dir.join("binaries/llama/llama-server.exe"));
-            candidates.push(dir.join("llama/llama-server.exe"));
+            candidates.push(dir.join(&rel));
+            candidates.push(dir.join(format!("llama/{}", LLAMA_SERVER_BIN)));
         }
     }
     for c in candidates {
@@ -183,7 +187,15 @@ fn resolve_llama_server(app: &tauri::AppHandle) -> Result<PathBuf, String> {
             return Ok(c);
         }
     }
-    Err("llama-server.exe não encontrado (runtime de IA ausente)".into())
+    Err("llama-server não encontrado (runtime de IA ausente)".into())
+}
+
+/// File path passed at launch (e.g. when opening a document with the app), if any.
+#[tauri::command]
+fn get_startup_file() -> Option<String> {
+    std::env::args()
+        .skip(1)
+        .find(|a| !a.starts_with('-') && Path::new(a).is_file())
 }
 
 /// Block until the given TCP port accepts a connection, or time out.
@@ -292,6 +304,16 @@ fn llm_status(state: State<'_, Mutex<LlmState>>) -> LlmStatus {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // single-instance must be registered first: a 2nd launch (e.g. "open with")
+        // forwards the file path to the running window instead of starting a new app.
+        .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
+            if let Some(file) = argv.iter().skip(1).find(|a| Path::new(a).is_file()) {
+                let _ = app.emit("open-file", file.clone());
+            }
+            if let Some(win) = app.get_webview_window("main") {
+                let _ = win.set_focus();
+            }
+        }))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
@@ -305,7 +327,8 @@ pub fn run() {
             list_models,
             start_llm,
             stop_llm,
-            llm_status
+            llm_status,
+            get_startup_file
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
