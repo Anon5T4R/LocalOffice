@@ -25,10 +25,11 @@ export const DEFAULT_MODELS_DIR = "D:\\LocalAIModels\\.lmstudio\\hub\\models";
 export const listModels = (dir: string) => invoke<ModelInfo[]>("list_models", { dir });
 
 export const startLlm = (modelPath: string, nGpuLayers: number, ctxSize: number) =>
+  // Tauri v2 expects camelCase arg keys (mapped to the snake_case Rust params).
   invoke<number>("start_llm", {
-    model_path: modelPath,
-    n_gpu_layers: nGpuLayers,
-    ctx_size: ctxSize,
+    modelPath,
+    nGpuLayers,
+    ctxSize,
   });
 
 export const stopLlm = () => invoke<void>("stop_llm");
