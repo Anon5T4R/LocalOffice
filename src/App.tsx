@@ -67,11 +67,29 @@ function App() {
     setTabs((ts) => ts.map((t) => (t.id === id && !t.dirty ? { ...t, dirty: true } : t)));
   }, []);
 
+  // Debounced autosave: only writes when you pause typing (zero cost while typing),
+  // and never loses more than a couple seconds of work. `scheduleRef` always points
+  // to the latest scheduler so the editor's onUpdate can call it.
+  const scheduleRef = useRef<() => void>(() => {});
+  const autosaveTimer = useRef<number | null>(null);
+  const firstDirtyAt = useRef(0);
+
+  const cancelAutosave = useCallback(() => {
+    if (autosaveTimer.current) {
+      clearTimeout(autosaveTimer.current);
+      autosaveTimer.current = null;
+    }
+    firstDirtyAt.current = 0;
+  }, []);
+
   const editor = useEditor({
     extensions: buildExtensions(),
     content: first.current.doc,
     autofocus: true,
-    onUpdate: () => markDirty(),
+    onUpdate: () => {
+      markDirty();
+      scheduleRef.current();
+    },
   });
 
   // ---- Tab operations (single editor, content swap) ----
@@ -184,11 +202,12 @@ function App() {
         const id = activeIdRef.current;
         setTabs((ts) => ts.map((t) => (t.id === id ? { ...t, filePath: doc.path, format: doc.format, dirty: false } : t)));
         remember(doc.path);
+        cancelAutosave();
       }
     } catch (e) {
       window.alert(`Não foi possível salvar:\n${e}`);
     }
-  }, [editor, remember]);
+  }, [editor, remember, cancelAutosave]);
 
   const handleSave = useCallback(async () => {
     if (!editor) return;
@@ -202,10 +221,11 @@ function App() {
       await saveDocumentTo(at.filePath, editor.getHTML(), at.format);
       setTabs((ts) => ts.map((t) => (t.id === at.id ? { ...t, dirty: false } : t)));
       remember(at.filePath);
+      cancelAutosave();
     } catch (e) {
       window.alert(`Não foi possível salvar:\n${e}`);
     }
-  }, [editor, handleSaveAs, remember]);
+  }, [editor, handleSaveAs, remember, cancelAutosave]);
 
   const handleInsertImage = useCallback(async () => {
     if (!editor) return;
@@ -213,19 +233,43 @@ function App() {
     if (dataUri) editor.chain().focus().setImage({ src: dataUri }).run();
   }, [editor]);
 
-  // ---- Autosave (active tab, every 60s, only if it has a path) ----
-  useEffect(() => {
+  // ---- Debounced autosave (only when idle; never while actively typing) ----
+  const doAutosave = useCallback(() => {
+    autosaveTimer.current = null;
+    firstDirtyAt.current = 0;
     if (!editor) return;
-    const iv = setInterval(() => {
-      const at = tabsRef.current.find((t) => t.id === activeIdRef.current);
-      if (at && at.filePath && at.dirty) {
-        saveDocumentTo(at.filePath, editor.getHTML(), at.format)
-          .then(() => setTabs((ts) => ts.map((t) => (t.id === at.id ? { ...t, dirty: false } : t))))
-          .catch(() => {});
-      }
-    }, 60000);
-    return () => clearInterval(iv);
+    const at = tabsRef.current.find((t) => t.id === activeIdRef.current);
+    if (at && at.filePath && at.dirty) {
+      const id = at.id;
+      saveDocumentTo(at.filePath, editor.getHTML(), at.format)
+        .then(() => setTabs((ts) => ts.map((t) => (t.id === id ? { ...t, dirty: false } : t))))
+        .catch(() => {});
+    }
   }, [editor]);
+
+  const scheduleAutosave = useCallback(() => {
+    const at = tabsRef.current.find((t) => t.id === activeIdRef.current);
+    if (!at || !at.filePath) return; // only files that already exist on disk
+    const now = Date.now();
+    if (firstDirtyAt.current === 0) firstDirtyAt.current = now;
+    if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
+    // Backstop: if you've been typing non-stop for 60s, save now anyway.
+    if (now - firstDirtyAt.current >= 60000) {
+      doAutosave();
+      return;
+    }
+    // DOCX/ODT go through pandoc (process spawn) -> wait a bit longer.
+    const delay = at.format === "docx" || at.format === "odt" ? 4000 : 2000;
+    autosaveTimer.current = window.setTimeout(doAutosave, delay);
+  }, [doAutosave]);
+
+  scheduleRef.current = scheduleAutosave;
+
+  useEffect(() => {
+    return () => {
+      if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
+    };
+  }, []);
 
   // ---- Open a file passed at launch / forwarded by a 2nd instance ----
   const openedStartup = useRef(false);
