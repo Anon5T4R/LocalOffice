@@ -171,6 +171,7 @@ export function Ribbon({ editor, onInsertImage }: RibbonProps) {
             <Btn onClick={onInsertImage} title="Inserir imagem" wide>🖼 Imagem</Btn>
             <Btn onClick={setLink} active={s.link} title="Inserir/editar link" wide>🔗 Link</Btn>
             <Btn onClick={() => chain().setHorizontalRule().run()} title="Linha divisória" wide>— Linha</Btn>
+            <Btn onClick={() => chain().setPageBreak().run()} title="Quebra de página (nova página no PDF)" wide>⤓ Quebra</Btn>
             <Btn onClick={() => chain().toggleCodeBlock().run()} active={s.codeBlock} title="Bloco de código" wide>{"{ } Código"}</Btn>
           </div>
         </div>

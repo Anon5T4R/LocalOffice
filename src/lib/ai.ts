@@ -16,6 +16,8 @@ export interface LlmStatus {
 export interface ChatMsg {
   role: "system" | "user" | "assistant";
   content: string;
+  /** Model "thinking" shown in a collapsible block (assistant only). */
+  reasoning?: string;
 }
 
 export const DEFAULT_MODELS_DIR = "D:\\LocalAIModels\\.lmstudio\\hub\\models";
@@ -53,11 +55,20 @@ export async function waitHealthy(port: number, timeoutMs = 180000): Promise<voi
   }
 }
 
-/** Stream a chat completion, calling onToken for each text delta. */
+export interface StreamDelta {
+  content?: string;
+  reasoning?: string;
+}
+
+/**
+ * Stream a chat completion. Calls onDelta for each chunk, separating the model's
+ * reasoning ("thinking") from the final answer. Reasoning comes either from the
+ * server's `reasoning_content` field or from inline <think>…</think> tags.
+ */
 export async function streamChat(
   port: number,
   messages: ChatMsg[],
-  onToken: (t: string) => void,
+  onDelta: (d: StreamDelta) => void,
   opts: { temperature?: number; signal?: AbortSignal } = {}
 ): Promise<void> {
   const res = await fetch(`http://127.0.0.1:${port}/v1/chat/completions`, {
@@ -71,6 +82,32 @@ export async function streamChat(
     signal: opts.signal,
   });
   if (!res.ok || !res.body) throw new Error(`a IA respondeu ${res.status}`);
+
+  // Split content on inline <think>…</think> tags, routing the inside to reasoning.
+  let inThink = false;
+  const routeContent = (text: string) => {
+    while (text.length) {
+      if (!inThink) {
+        const i = text.indexOf("<think>");
+        if (i === -1) {
+          onDelta({ content: text });
+          return;
+        }
+        if (i > 0) onDelta({ content: text.slice(0, i) });
+        inThink = true;
+        text = text.slice(i + "<think>".length);
+      } else {
+        const j = text.indexOf("</think>");
+        if (j === -1) {
+          onDelta({ reasoning: text });
+          return;
+        }
+        if (j > 0) onDelta({ reasoning: text.slice(0, j) });
+        inThink = false;
+        text = text.slice(j + "</think>".length);
+      }
+    }
+  };
 
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
@@ -87,9 +124,10 @@ export async function streamChat(
       const data = trimmed.slice(5).trim();
       if (data === "[DONE]") return;
       try {
-        const json = JSON.parse(data);
-        const delta = json.choices?.[0]?.delta?.content;
-        if (delta) onToken(delta);
+        const delta = JSON.parse(data).choices?.[0]?.delta;
+        if (!delta) continue;
+        if (delta.reasoning_content) onDelta({ reasoning: delta.reasoning_content });
+        if (delta.content) routeContent(delta.content);
       } catch {
         /* ignore partial/keepalive lines */
       }

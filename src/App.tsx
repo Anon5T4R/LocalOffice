@@ -8,9 +8,11 @@ import { Ribbon } from "./editor/Ribbon";
 import { TabStrip } from "./editor/TabStrip";
 import { SearchBar } from "./editor/search/SearchBar";
 import { ChaptersPanel } from "./editor/ChaptersPanel";
+import { StatusBar } from "./editor/StatusBar";
 import { AiPanel } from "./ai/AiPanel";
 import { SettingsModal } from "./SettingsModal";
 import { pickImageDataUri } from "./lib/images";
+import { exportToPdf } from "./lib/pdf";
 import {
   DocFile,
   baseName,
@@ -25,8 +27,10 @@ import {
   Settings,
   addRecent,
   applyTheme,
+  loadHeaderFooter,
   loadRecents,
   loadSettings,
+  saveHeaderFooter,
   saveSettings,
 } from "./lib/settings";
 import "./App.css";
@@ -125,17 +129,30 @@ function App() {
       const active = tabsRef.current.find((t) => t.id === oldId);
       const reuse = !!active && !active.filePath && !active.dirty;
 
+      const hf = loadHeaderFooter(doc.path);
+
       if (reuse) {
         editor.commands.setContent(doc.html, { emitUpdate: false });
         const json = editor.getJSON();
         setTabs((ts) =>
-          ts.map((t) => (t.id === oldId ? { ...t, filePath: doc.path, format: doc.format, doc: json, dirty: false } : t))
+          ts.map((t) =>
+            t.id === oldId
+              ? { ...t, filePath: doc.path, format: doc.format, doc: json, dirty: false, header: hf.header, footer: hf.footer }
+              : t
+          )
         );
       } else {
         const oldJson = editor.getJSON();
         editor.commands.setContent(doc.html, { emitUpdate: false });
         const newJson = editor.getJSON();
-        const t = newTab({ filePath: doc.path, format: doc.format, doc: newJson, dirty: false });
+        const t = newTab({
+          filePath: doc.path,
+          format: doc.format,
+          doc: newJson,
+          dirty: false,
+          header: hf.header,
+          footer: hf.footer,
+        });
         setTabs((ts) => ts.map((x) => (x.id === oldId ? { ...x, doc: oldJson } : x)).concat(t));
         setActiveId(t.id);
       }
@@ -233,6 +250,38 @@ function App() {
     if (dataUri) editor.chain().focus().setImage({ src: dataUri }).run();
   }, [editor]);
 
+  const setHeaderFooter = useCallback((patch: { header?: string; footer?: string }) => {
+    const id = activeIdRef.current;
+    setTabs((ts) =>
+      ts.map((t) => {
+        if (t.id !== id) return t;
+        const next = { ...t, ...patch };
+        if (next.filePath) saveHeaderFooter(next.filePath, { header: next.header, footer: next.footer });
+        return next;
+      })
+    );
+  }, []);
+
+  const handleExportPdf = useCallback(() => {
+    if (!editor) return;
+    const at = tabsRef.current.find((t) => t.id === activeIdRef.current);
+    exportToPdf(editor.getHTML(), at?.header ?? "", at?.footer ?? "");
+  }, [editor]);
+
+  // Click in the page margins / empty area -> caret jumps to the nearest line.
+  const handlePageMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      if (!editor || e.button !== 0) return;
+      const target = e.target as HTMLElement;
+      if (target.closest(".ProseMirror") || target.closest(".page-hf")) return; // let normal handling run
+      e.preventDefault();
+      const found = editor.view.posAtCoords({ left: e.clientX, top: e.clientY });
+      if (found) editor.chain().focus().setTextSelection(found.pos).run();
+      else editor.chain().focus("end").run();
+    },
+    [editor]
+  );
+
   // ---- Debounced autosave (only when idle; never while actively typing) ----
   const doAutosave = useCallback(() => {
     autosaveTimer.current = null;
@@ -318,6 +367,8 @@ function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, [handleSave, handleSaveAs, handleOpen, newBlankTab, closeTab]);
 
+  const active = tabs.find((t) => t.id === activeId);
+
   return (
     <div className="app">
       <MenuBar
@@ -337,11 +388,26 @@ function App() {
       {editor && <Ribbon editor={editor} onInsertImage={handleInsertImage} />}
       <div className="workspace">
         {chaptersOpen && editor && <ChaptersPanel editor={editor} onClose={() => setChaptersOpen(false)} />}
-        <div className="editor-scroll">
-          {showSearch && editor && <SearchBar editor={editor} onClose={() => setShowSearch(false)} />}
-          <div className="page">
-            <EditorContent editor={editor} className="editor" />
+        <div className="editor-main">
+          <div className="editor-scroll">
+            {showSearch && editor && <SearchBar editor={editor} onClose={() => setShowSearch(false)} />}
+            <div className="page" onMouseDown={handlePageMouseDown}>
+              <input
+                className="page-hf page-header"
+                placeholder="Cabeçalho (aparece no PDF)"
+                value={active?.header ?? ""}
+                onChange={(e) => setHeaderFooter({ header: e.target.value })}
+              />
+              <EditorContent editor={editor} className="editor" />
+              <input
+                className="page-hf page-footer"
+                placeholder="Rodapé (aparece no PDF)"
+                value={active?.footer ?? ""}
+                onChange={(e) => setHeaderFooter({ footer: e.target.value })}
+              />
+            </div>
           </div>
+          {editor && <StatusBar editor={editor} onExportPdf={handleExportPdf} />}
         </div>
         {aiOpen && (
           <AiPanel editor={editor} settings={settings} onPersist={updateSettings} onClose={() => setAiOpen(false)} />

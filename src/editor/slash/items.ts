@@ -100,6 +100,13 @@ const ITEMS: SlashItem[] = [
     keywords: "linha divisoria separador hr horizontal rule",
     command: ({ editor, range }) => editor.chain().focus().deleteRange(range).setHorizontalRule().run(),
   },
+  {
+    title: "Quebra de página",
+    subtitle: "Nova página no PDF",
+    icon: "⤓",
+    keywords: "quebra pagina page break pdf",
+    command: ({ editor, range }) => editor.chain().focus().deleteRange(range).setPageBreak().run(),
+  },
 ];
 
 export function getSlashItems(query: string): SlashItem[] {

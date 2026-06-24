@@ -366,6 +366,152 @@ body {
   color: var(--muted);
 }
 
+/* Editor column (scroll area + status bar) */
+.editor-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* Header / footer zones on the page */
+.page-hf {
+  display: block;
+  width: 100%;
+  border: none;
+  border-bottom: 1px dashed transparent;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  font-family: inherit;
+  padding: 4px 0;
+  outline: none;
+}
+
+.page-header {
+  margin-bottom: 18px;
+  border-bottom: 1px dashed var(--border);
+}
+
+.page-footer {
+  margin-top: 18px;
+  border-top: 1px dashed var(--border);
+  padding-top: 8px;
+}
+
+.page-hf:focus {
+  color: var(--text);
+}
+
+/* Status bar */
+.status-bar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 4px 14px;
+  border-top: 1px solid var(--border);
+  background: var(--panel);
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.status-spacer {
+  flex: 1;
+}
+
+.status-bar .tb-btn {
+  height: 24px;
+  font-size: 12px;
+}
+
+/* AI reasoning (collapsible) */
+.ai-reasoning {
+  margin-bottom: 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  font-size: 12px;
+}
+
+.ai-reasoning summary {
+  cursor: pointer;
+  padding: 4px 8px;
+  color: var(--muted);
+  user-select: none;
+}
+
+.ai-reasoning-body {
+  padding: 6px 8px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  white-space: pre-wrap;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+/* ---- Print / PDF export ---- */
+#print-root {
+  display: none;
+}
+
+@media print {
+  .app {
+    display: none !important;
+  }
+  #print-root {
+    display: block !important;
+  }
+  @page {
+    size: A4;
+    margin: 18mm 16mm;
+  }
+  .print-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .print-header {
+    padding-bottom: 8px;
+    border-bottom: 1px solid #ccc;
+    font-size: 11pt;
+    color: #444;
+  }
+  .print-footer {
+    padding-top: 8px;
+    border-top: 1px solid #ccc;
+    font-size: 10pt;
+    color: #444;
+    text-align: center;
+  }
+  .print-content {
+    font-size: 12pt;
+    line-height: 1.5;
+    color: #000;
+  }
+  .print-content img {
+    max-width: 100%;
+  }
+  .print-content table {
+    border-collapse: collapse;
+    width: 100%;
+  }
+  .print-content th,
+  .print-content td {
+    border: 1px solid #999;
+    padding: 4px 8px;
+  }
+  /* Manual page breaks become real page breaks; their visual marker is hidden. */
+  .print-content [data-page-break] {
+    break-after: page;
+    page-break-after: always;
+    border: none;
+    height: 0;
+    margin: 0;
+  }
+  .print-content .page-break-label {
+    display: none;
+  }
+}
+
 .page {
   max-width: var(--page-max);
   margin: 0 auto;
@@ -504,6 +650,28 @@ body {
   background: #fde68a;
   border-radius: 2px;
   padding: 0 1px;
+}
+
+/* Page break (manual) */
+.ProseMirror .page-break {
+  position: relative;
+  margin: 26px 0;
+  border-top: 2px dashed var(--border);
+  text-align: center;
+  user-select: none;
+}
+
+.ProseMirror .page-break-label {
+  position: relative;
+  top: -10px;
+  background: var(--panel);
+  padding: 0 10px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.ProseMirror .page-break.ProseMirror-selectednode {
+  border-top-color: var(--accent);
 }
 
 /* Task lists */

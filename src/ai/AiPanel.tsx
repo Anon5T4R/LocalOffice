@@ -115,11 +115,15 @@ export function AiPanel({ editor, settings, onPersist, onClose }: AiPanelProps) 
       abortRef.current = ac;
       setStreaming(true);
       try {
-        await streamChat(port, convo, (t) => {
+        await streamChat(port, convo, (d) => {
           setMessages((m) => {
             const copy = [...m];
             const last = copy[copy.length - 1];
-            copy[copy.length - 1] = { role: "assistant", content: last.content + t };
+            copy[copy.length - 1] = {
+              role: "assistant",
+              content: last.content + (d.content ?? ""),
+              reasoning: (last.reasoning ?? "") + (d.reasoning ?? "") || undefined,
+            };
             return copy;
           });
         }, { signal: ac.signal });
@@ -229,7 +233,15 @@ export function AiPanel({ editor, settings, onPersist, onClose }: AiPanelProps) 
         {messages.length === 0 && <div className="ai-empty">Inicie um modelo e converse, ou selecione um trecho e use as ações acima.</div>}
         {messages.map((m, i) => (
           <div key={i} className={`ai-msg ai-${m.role}`}>
-            <div className="ai-msg-body">{m.content || (streaming && i === messages.length - 1 ? "…" : "")}</div>
+            {m.role === "assistant" && m.reasoning && (
+              <details className="ai-reasoning" open={!m.content}>
+                <summary>💭 Raciocínio</summary>
+                <div className="ai-reasoning-body">{m.reasoning}</div>
+              </details>
+            )}
+            <div className="ai-msg-body">
+              {m.content || (streaming && i === messages.length - 1 && !m.reasoning ? "…" : "")}
+            </div>
             {m.role === "assistant" && m.content && !m.content.startsWith("⚠️") && (
               <button className="ai-insert" onClick={() => insertIntoDoc(m.content)} title="Inserir no documento">Inserir ↧</button>
             )}

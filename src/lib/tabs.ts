@@ -8,6 +8,8 @@ export interface Tab {
   dirty: boolean;
   /** ProseMirror JSON — source of truth for inactive tabs. */
   doc: JSONContent;
+  header: string;
+  footer: string;
 }
 
 export const EMPTY_DOC: JSONContent = { type: "doc", content: [{ type: "paragraph" }] };
@@ -21,6 +23,8 @@ export function newTab(partial: Partial<Tab> = {}): Tab {
     format: "markdown",
     dirty: false,
     doc: EMPTY_DOC,
+    header: "",
+    footer: "",
     ...partial,
   };
 }
