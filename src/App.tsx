@@ -11,6 +11,8 @@ import { SearchBar } from "./editor/search/SearchBar";
 import { ChaptersPanel } from "./editor/ChaptersPanel";
 import { StatusBar } from "./editor/StatusBar";
 import { AiPanel } from "./ai/AiPanel";
+import { AiBubbleMenu } from "./ai/AiBubbleMenu";
+import { useLocalAi } from "./ai/useLocalAi";
 import { SettingsModal } from "./SettingsModal";
 import { pickImageDataUri } from "./lib/images";
 import { exportToPdf } from "./lib/pdf";
@@ -94,6 +96,9 @@ function App() {
       scheduleRef.current();
     },
   });
+
+  // Local AI engine, shared by the side panel and the selection bubble menu.
+  const ai = useLocalAi(editor, settings, updateSettings);
 
   // ---- Tab operations (single editor, content swap) ----
 
@@ -367,6 +372,7 @@ function App() {
       />
       <TabStrip tabs={tabs} activeId={activeId} onSelect={switchTab} onClose={closeTab} onNew={newBlankTab} />
       {editor && <Ribbon editor={editor} onInsertImage={handleInsertImage} />}
+      {editor && <AiBubbleMenu editor={editor} ai={ai} onOpenPanel={() => setAiOpen(true)} />}
       <div className="workspace">
         {chaptersOpen && editor && <ChaptersPanel editor={editor} onClose={() => setChaptersOpen(false)} />}
         <div className="editor-main">
@@ -378,9 +384,7 @@ function App() {
           </div>
           {editor && <StatusBar editor={editor} />}
         </div>
-        {aiOpen && (
-          <AiPanel editor={editor} settings={settings} onPersist={updateSettings} onClose={() => setAiOpen(false)} />
-        )}
+        {aiOpen && <AiPanel editor={editor} ai={ai} onClose={() => setAiOpen(false)} />}
       </div>
       {showSettings && (
         <SettingsModal settings={settings} onChange={updateSettings} onClose={() => setShowSettings(false)} />

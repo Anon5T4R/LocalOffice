@@ -8,6 +8,15 @@ const host = process.env.TAURI_DEV_HOST;
 export default defineConfig(async () => ({
   plugins: [react()],
 
+  // The @tiptap/react/menus subpath can otherwise resolve a second copy of React,
+  // which breaks hooks ("Invalid hook call"). Force a single React instance.
+  resolve: {
+    dedupe: ["react", "react-dom"],
+  },
+  optimizeDeps: {
+    include: ["react", "react-dom", "@tiptap/react", "@tiptap/react/menus"],
+  },
+
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //
   // 1. prevent Vite from obscuring rust errors

@@ -809,8 +809,14 @@ body {
   border: 1px solid var(--border);
 }
 
-.ai-insert {
+.ai-result-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
   margin-top: 6px;
+}
+
+.ai-insert {
   font-size: 11px;
   border: 1px solid var(--border);
   background: transparent;
@@ -818,6 +824,48 @@ body {
   border-radius: 5px;
   padding: 2px 6px;
   cursor: pointer;
+}
+
+.ai-hint {
+  font-size: 11px;
+  color: var(--muted);
+  align-self: center;
+}
+
+/* ---- Selection bubble menu (AI actions over selected text) ---- */
+.ai-bubble {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  max-width: 460px;
+  padding: 4px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
+  z-index: 40;
+}
+
+.ai-bubble-btn {
+  font-size: 12px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  border-radius: 5px;
+  padding: 4px 8px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.ai-bubble-btn:hover {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.ai-bubble-hint {
+  font-size: 12px;
+  color: var(--muted);
+  padding: 4px 8px;
 }
 
 .ai-input {
