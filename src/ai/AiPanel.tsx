@@ -176,6 +176,17 @@ export function AiPanel({ editor, settings, onPersist, onClose }: AiPanelProps) 
         <span className="ai-dot" style={{ background: statusDot }} />
         <strong>IA local</strong>
         <span className="ai-spacer" />
+        <button
+          className="tb-btn"
+          onClick={() => {
+            abortRef.current?.abort();
+            setMessages([]);
+          }}
+          disabled={!messages.length}
+          title="Limpar conversa (poupa contexto)"
+        >
+          🗑
+        </button>
         <button className="tb-btn" onClick={onClose} title="Fechar painel">✕</button>
       </div>
 

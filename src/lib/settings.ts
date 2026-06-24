@@ -69,22 +69,3 @@ export function addRecent(path: string): Recent[] {
 export function clearRecents(): void {
   localStorage.removeItem(RECENTS_KEY);
 }
-
-// Header/footer are stored keyed by file path (not embedded in the file itself),
-// so they survive reopening without altering the document content.
-export interface HeaderFooter {
-  header: string;
-  footer: string;
-}
-
-export function loadHeaderFooter(path: string): HeaderFooter {
-  try {
-    return { header: "", footer: "", ...JSON.parse(localStorage.getItem("localoffice.hf:" + path) || "{}") };
-  } catch {
-    return { header: "", footer: "" };
-  }
-}
-
-export function saveHeaderFooter(path: string, hf: HeaderFooter): void {
-  localStorage.setItem("localoffice.hf:" + path, JSON.stringify(hf));
-}

@@ -374,35 +374,6 @@ body {
   min-height: 0;
 }
 
-/* Header / footer zones on the page */
-.page-hf {
-  display: block;
-  width: 100%;
-  border: none;
-  border-bottom: 1px dashed transparent;
-  background: transparent;
-  color: var(--muted);
-  font-size: 13px;
-  font-family: inherit;
-  padding: 4px 0;
-  outline: none;
-}
-
-.page-header {
-  margin-bottom: 18px;
-  border-bottom: 1px dashed var(--border);
-}
-
-.page-footer {
-  margin-top: 18px;
-  border-top: 1px dashed var(--border);
-  padding-top: 8px;
-}
-
-.page-hf:focus {
-  color: var(--text);
-}
-
 /* Status bar */
 .status-bar {
   display: flex;
@@ -464,23 +435,6 @@ body {
   @page {
     size: A4;
     margin: 18mm 16mm;
-  }
-  .print-table {
-    width: 100%;
-    border-collapse: collapse;
-  }
-  .print-header {
-    padding-bottom: 8px;
-    border-bottom: 1px solid #ccc;
-    font-size: 11pt;
-    color: #444;
-  }
-  .print-footer {
-    padding-top: 8px;
-    border-top: 1px solid #ccc;
-    font-size: 10pt;
-    color: #444;
-    text-align: center;
   }
   .print-content {
     font-size: 12pt;

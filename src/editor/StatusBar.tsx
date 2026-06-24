@@ -4,7 +4,7 @@ import { Editor, useEditorState } from "@tiptap/react";
 // Approx. content height of one A4 page at our page width, in CSS px.
 const A4_PAGE_PX = 980;
 
-export function StatusBar({ editor, onExportPdf }: { editor: Editor; onExportPdf: () => void }) {
+export function StatusBar({ editor }: { editor: Editor }) {
   const { words, breaks } = useEditorState({
     editor,
     selector: ({ editor }) => {
@@ -35,8 +35,6 @@ export function StatusBar({ editor, onExportPdf }: { editor: Editor; onExportPdf
     <div className="status-bar">
       <span title="Estimativa baseada na altura do conteúdo (A4)">~{pages} página{pages > 1 ? "s" : ""}</span>
       <span>{words} palavra{words === 1 ? "" : "s"}</span>
-      <span className="status-spacer" />
-      <button className="tb-btn" onClick={onExportPdf} title="Exportar para PDF (com cabeçalho/rodapé)">⤓ PDF</button>
     </div>
   );
 }
