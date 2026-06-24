@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { ask } from "@tauri-apps/plugin-dialog";
 import { buildExtensions } from "./editor/extensions";
 import { MenuBar } from "./editor/MenuBar";
 import { Ribbon } from "./editor/Ribbon";
@@ -241,28 +241,27 @@ function App() {
     exportToPdf(editor.getHTML());
   }, [editor]);
 
-  // Confirm before closing the window if any tab has unsaved changes.
+  // The Rust side intercepts the window close and emits "close-requested".
+  // We confirm here (we know which tabs are unsaved) and then quit via exit_app.
   useEffect(() => {
-    let unlisten: (() => void) | undefined;
-    try {
-      getCurrentWindow()
-        .onCloseRequested((event) => {
-          const dirtyCount = tabsRef.current.filter((t) => t.dirty).length;
-          if (dirtyCount > 0) {
-            const ok = window.confirm(
-              `Você tem ${dirtyCount} documento(s) com alterações não salvas.\n\nSair mesmo assim? (Cancele para voltar e salvar.)`
-            );
-            if (!ok) event.preventDefault();
-          }
-        })
-        .then((un) => {
-          unlisten = un;
-        })
-        .catch(() => {});
-    } catch {
-      /* not running under Tauri (e.g. browser preview) */
-    }
-    return () => unlisten?.();
+    const unlistenPromise = listen("close-requested", async () => {
+      try {
+        const dirtyCount = tabsRef.current.filter((t) => t.dirty).length;
+        if (dirtyCount > 0) {
+          const ok = await ask(
+            `Você tem ${dirtyCount} documento(s) com alterações não salvas.\nSair mesmo assim?`,
+            { title: "Sair do LocalOffice", kind: "warning" }
+          );
+          if (!ok) return; // keep the app open
+        }
+      } catch {
+        /* if the dialog fails, fall through to exit so the user isn't trapped */
+      }
+      invoke("exit_app").catch(() => {});
+    });
+    return () => {
+      unlistenPromise.then((un) => un());
+    };
   }, []);
 
   // ---- Debounced autosave (only when idle; never while actively typing) ----

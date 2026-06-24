@@ -198,6 +198,12 @@ fn get_startup_file() -> Option<String> {
         .find(|a| !a.starts_with('-') && Path::new(a).is_file())
 }
 
+/// Actually quit the app (called by the frontend after confirming unsaved changes).
+#[tauri::command]
+fn exit_app(app: tauri::AppHandle) {
+    app.exit(0);
+}
+
 /// Block until the given TCP port accepts a connection, or time out.
 fn wait_for_port(port: u16, secs: u64) -> Result<(), String> {
     let addr: SocketAddr = ([127, 0, 0, 1], port).into();
@@ -318,6 +324,14 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .manage(Mutex::new(LlmState::default()))
+        // Intercept the window close: keep the app open and ask the frontend to
+        // confirm (it knows which tabs are unsaved). The frontend then calls exit_app.
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                api.prevent_close();
+                let _ = window.emit("close-requested", ());
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             read_text_file,
             read_file_base64,
@@ -328,7 +342,8 @@ pub fn run() {
             start_llm,
             stop_llm,
             llm_status,
-            get_startup_file
+            get_startup_file,
+            exit_app
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
