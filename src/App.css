@@ -432,14 +432,18 @@ body {
   #print-root {
     display: block !important;
   }
+  /* margin:0 leaves no room for the browser's own header/footer (date, title,
+     page number, URL), so they don't print. Page margins move into the content
+     padding below. */
   @page {
     size: A4;
-    margin: 18mm 16mm;
+    margin: 0;
   }
   .print-content {
     font-size: 12pt;
     line-height: 1.5;
     color: #000;
+    padding: 18mm 16mm;
   }
   .print-content img {
     max-width: 100%;

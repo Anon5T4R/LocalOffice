@@ -1,7 +1,8 @@
 /**
  * Render the document to a print view and open the browser's print-to-PDF.
- * Manual page breaks become real page breaks (via CSS in App.css). Page numbers
- * can be enabled in the print dialog's own header/footer option.
+ * Manual page breaks become real page breaks (via CSS in App.css). The page
+ * margin is 0 so the browser prints no header/footer (date, title, page #, URL);
+ * the visual margins live in `.print-content` padding instead.
  */
 export function exportToPdf(contentHtml: string): void {
   document.getElementById("print-root")?.remove();
