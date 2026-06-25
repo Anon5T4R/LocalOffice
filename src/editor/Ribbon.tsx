@@ -113,7 +113,6 @@ export function Ribbon({ editor, onInsertImage }: RibbonProps) {
               onChange={(e) => {
                 if (e.target.value) chain().setFontFamily(e.target.value).run();
               }}
-              onMouseDown={(e) => e.preventDefault()}
               title="Fonte"
             >
               <option value="">Fonte</option>
@@ -142,7 +141,6 @@ export function Ribbon({ editor, onInsertImage }: RibbonProps) {
               onChange={(e) => {
                 if (e.target.value) chain().setFontSize(e.target.value + "px").run();
               }}
-              onMouseDown={(e) => e.preventDefault()}
               title="Tamanho da fonte"
             >
               <option value="">Tamanho</option>
