@@ -9,11 +9,13 @@ import TextAlign from "@tiptap/extension-text-align";
 import Highlight from "@tiptap/extension-highlight";
 import { TextStyle } from "@tiptap/extension-text-style";
 import { Color } from "@tiptap/extension-color";
+import FontFamily from "@tiptap/extension-font-family";
 import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
 import { SlashCommand } from "./slash/SlashCommand";
 import { SearchExtension } from "./search/SearchExtension";
 import { PageBreak } from "./PageBreak";
+import { FontSize } from "./FontSize";
 
 export function buildExtensions() {
   return [
@@ -33,6 +35,8 @@ export function buildExtensions() {
     Highlight.configure({ multicolor: true }),
     TextStyle,
     Color,
+    FontFamily.configure({ types: ["textStyle"] }),
+    FontSize.configure({ types: ["textStyle"] }),
     TaskList,
     TaskItem.configure({ nested: true }),
     PageBreak,

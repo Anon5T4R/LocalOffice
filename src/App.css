@@ -168,6 +168,23 @@ body {
   cursor: default;
 }
 
+.tb-select {
+  appearance: auto;
+  cursor: pointer;
+  background: var(--bg);
+  border-color: var(--border);
+  font-size: 12px;
+  padding: 0 4px;
+  min-width: 80px;
+  height: 28px;
+  border-radius: 5px;
+}
+
+.tb-select option {
+  background: var(--panel);
+  color: var(--text);
+}
+
 .tb-filename {
   font-size: 12px;
   color: var(--muted);

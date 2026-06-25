@@ -56,6 +56,8 @@ export function Ribbon({ editor, onInsertImage }: RibbonProps) {
       quote: editor.isActive("blockquote"),
       codeBlock: editor.isActive("codeBlock"),
       link: editor.isActive("link"),
+      fontFamily: editor.getAttributes("textStyle").fontFamily,
+      fontSize: editor.getAttributes("textStyle").fontSize,
       highlight: editor.isActive("highlight"),
       alignLeft: editor.isActive({ textAlign: "left" }),
       alignCenter: editor.isActive({ textAlign: "center" }),
@@ -101,6 +103,63 @@ export function Ribbon({ editor, onInsertImage }: RibbonProps) {
             <Btn onClick={() => chain().toggleHeading({ level: 1 }).run()} active={s.h1} title="Título 1">H1</Btn>
             <Btn onClick={() => chain().toggleHeading({ level: 2 }).run()} active={s.h2} title="Título 2">H2</Btn>
             <Btn onClick={() => chain().toggleHeading({ level: 3 }).run()} active={s.h3} title="Título 3">H3</Btn>
+          </div>
+          <div className="tb-sep" />
+
+          <div className="tb-group">
+            <select
+              className="tb-btn tb-select"
+              value={s.fontFamily || ""}
+              onChange={(e) => {
+                if (e.target.value) chain().setFontFamily(e.target.value).run();
+              }}
+              onMouseDown={(e) => e.preventDefault()}
+              title="Fonte"
+            >
+              <option value="">Fonte</option>
+              <option value="sans-serif">Sans-serif</option>
+              <option value="serif">Serif</option>
+              <option value="monospace">Monospace</option>
+              <option value="Arial">Arial</option>
+              <option value="Times New Roman">Times New Roman</option>
+              <option value="Courier New">Courier New</option>
+              <option value="Georgia">Georgia</option>
+              <option value="Verdana">Verdana</option>
+            </select>
+            <button
+              className="tb-btn"
+              onClick={() => chain().unsetFontFamily().run()}
+              title="Fonte padrão"
+              disabled={!s.fontFamily}
+            >
+              ↺
+            </button>
+          </div>
+          <div className="tb-group">
+            <select
+              className="tb-btn tb-select"
+              value={s.fontSize ? parseInt(s.fontSize).toString() : ""}
+              onChange={(e) => {
+                if (e.target.value) chain().setFontSize(e.target.value + "px").run();
+              }}
+              onMouseDown={(e) => e.preventDefault()}
+              title="Tamanho da fonte"
+            >
+              <option value="">Tamanho</option>
+              {[8, 9, 10, 11, 12, 14, 16, 18, 20, 22, 24, 28, 36, 48, 72].map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+            <button
+              className="tb-btn"
+              onClick={() => chain().unsetFontSize().run()}
+              title="Tamanho padrão"
+              disabled={!s.fontSize}
+            >
+              ↺
+            </button>
           </div>
           <div className="tb-sep" />
 
