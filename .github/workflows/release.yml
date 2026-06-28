@@ -65,3 +65,37 @@ jobs:
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
+
+      # Gera uma versão "portable" para Windows: instala o NSIS silenciosamente
+      # numa pasta limpa e zipa o conteúdo (exe + sidecar pandoc + resources/llama).
+      # É uma cópia fiel do que o usuário recebe, mas sem precisar instalar.
+      - name: Gerar portable (Windows)
+        if: matrix.platform == 'windows-latest'
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem -Recurse -Filter "*-setup.exe" `
+            -Path "src-tauri/target/release/bundle/nsis" | Select-Object -First 1
+          if (-not $setup) { throw "instalador NSIS não encontrado" }
+
+          $dest = "$env:RUNNER_TEMP\LocalOfficePortable"
+          if (Test-Path $dest) { Remove-Item -Recurse -Force $dest }
+
+          # /S = silencioso; /D = diretório de instalação (precisa ser o último arg, sem aspas)
+          Start-Process -FilePath $setup.FullName -ArgumentList '/S', "/D=$dest" -Wait
+          # O instalador pode auto-iniciar o app ao terminar — encerra para liberar os arquivos.
+          Start-Sleep -Seconds 3
+          Get-Process -Name "LocalOffice" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+          Remove-Item "$dest\uninstall*.exe" -Force -ErrorAction SilentlyContinue
+
+          if (-not (Test-Path "$dest\LocalOffice.exe")) { throw "instalação portable falhou (LocalOffice.exe ausente)" }
+
+          $zip = "$env:RUNNER_TEMP\LocalOffice_${{ github.ref_name }}_x64_portable.zip"
+          Compress-Archive -Path "$dest\*" -DestinationPath $zip -Force
+          "PORTABLE_ZIP=$zip" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Publicar portable no release (Windows)
+        if: matrix.platform == 'windows-latest' && startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ github.ref_name }}" "$env:PORTABLE_ZIP" --clobber
