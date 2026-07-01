@@ -14,6 +14,7 @@ interface MenuBarProps {
   onOpenRecent: (path: string) => void;
   onOpenSettings: () => void;
   onExportPdf: () => void;
+  onVersionHistory: () => void;
 }
 
 function RecentsMenu({ recents, onPick }: { recents: Recent[]; onPick: (path: string) => void }) {
@@ -67,6 +68,7 @@ export function MenuBar({
   onOpenRecent,
   onOpenSettings,
   onExportPdf,
+  onVersionHistory,
 }: MenuBarProps) {
   return (
     <div className="menubar">
@@ -79,6 +81,7 @@ export function MenuBar({
         <button className="tb-btn" onClick={onSave} title="Salvar (Ctrl+S)">Salvar</button>
         <button className="tb-btn" onClick={onSaveAs} title="Salvar como (Ctrl+Shift+S)">Salvar como…</button>
         <button className="tb-btn" onClick={onExportPdf} title="Exportar como PDF">PDF</button>
+        <button className="tb-btn" onClick={onVersionHistory} title="Histórico de versões">⏱ Versões</button>
       </div>
 
       <div className="tb-spacer" />

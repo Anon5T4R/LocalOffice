@@ -7,6 +7,12 @@
   --accent: #2563eb;
   --accent-soft: #dbeafe;
   --page-max: 760px;
+  --page-width: var(--page-max);
+  --page-height: auto;
+  --page-margin-top: 56px;
+  --page-margin-bottom: 56px;
+  --page-margin-left: 72px;
+  --page-margin-right: 72px;
   font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 
@@ -488,14 +494,40 @@ body {
 }
 
 .page {
-  max-width: var(--page-max);
+  max-width: var(--page-width);
+  width: 100%;
   margin: 0 auto;
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 8px;
-  padding: 56px 72px;
+  padding: var(--page-margin-top) var(--page-margin-right) var(--page-margin-bottom) var(--page-margin-left);
   min-height: 60vh;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.page.fixed {
+  min-height: 0;
+  height: var(--page-height);
+  overflow: hidden;
+  margin-bottom: 24px;
+  position: relative;
+}
+
+.page.fixed + .page.fixed {
+  margin-top: 0;
+}
+
+.page-ghost {
+  height: 100%;
+  pointer-events: none;
+  user-select: none;
+}
+
+.pages-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
 }
 
 /* ProseMirror content */

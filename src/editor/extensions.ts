@@ -16,6 +16,8 @@ import { SlashCommand } from "./slash/SlashCommand";
 import { SearchExtension } from "./search/SearchExtension";
 import { PageBreak } from "./PageBreak";
 import { FontSize } from "./FontSize";
+import { LetterSpacing } from "./LetterSpacing";
+import { LineHeight } from "./LineHeight";
 
 export function buildExtensions() {
   return [
@@ -37,6 +39,8 @@ export function buildExtensions() {
     Color,
     FontFamily.configure({ types: ["textStyle"] }),
     FontSize.configure({ types: ["textStyle"] }),
+    LetterSpacing.configure({ types: ["textStyle"] }),
+    LineHeight.configure({ types: ["paragraph", "heading"] }),
     TaskList,
     TaskItem.configure({ nested: true }),
     PageBreak,
