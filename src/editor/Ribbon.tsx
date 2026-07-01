@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Editor, useEditorState } from "@tiptap/react";
 import { PageFormat, PageMargins, CustomFont } from "../lib/settings";
+import { TEMPLATES, DocTemplate } from "../lib/templates";
 
 interface RibbonProps {
   editor: Editor;
@@ -12,6 +13,7 @@ interface RibbonProps {
   systemFonts: string[];
   customFonts: CustomFont[];
   onImportFont: () => void;
+  onApplyTemplate: (tmpl: DocTemplate) => void;
 }
 
 function Btn({
@@ -71,6 +73,7 @@ export function Ribbon({
   systemFonts,
   customFonts,
   onImportFont,
+  onApplyTemplate,
 }: RibbonProps) {
   const [tab, setTab] = useState<"inicio" | "inserir" | "layout">("inicio");
 
@@ -98,6 +101,9 @@ export function Ribbon({
       highlight: editor.isActive("highlight"),
       highlightColor: editor.getAttributes("highlight").color,
       letterSpacing: editor.getAttributes("textStyle").letterSpacing,
+      lineHeight:
+        editor.getAttributes("paragraph").lineHeight ||
+        editor.getAttributes("heading").lineHeight || "",
       alignLeft: editor.isActive({ textAlign: "left" }),
       alignCenter: editor.isActive({ textAlign: "center" }),
       alignRight: editor.isActive({ textAlign: "right" }),
@@ -296,6 +302,26 @@ export function Ribbon({
           <div className="tb-group">
             <select
               className="tb-btn tb-select"
+              defaultValue=""
+              onChange={(e) => {
+                const t = TEMPLATES[e.target.value];
+                if (t) onApplyTemplate(t);
+                e.target.value = "";
+              }}
+              title="Modelo de documento pré-configurado"
+              style={{ minWidth: 120 }}
+            >
+              <option value="">Modelos ▾</option>
+              {Object.entries(TEMPLATES).map(([key, t]) => (
+                <option key={key} value={key} title={t.description}>{t.name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="tb-sep" />
+
+          <div className="tb-group">
+            <select
+              className="tb-btn tb-select"
               value={pageFormat}
               onChange={(e) => onPageFormatChange(e.target.value as PageFormat)}
               title="Formato de página"
@@ -325,6 +351,27 @@ export function Ribbon({
               <option value="wide">Amplas</option>
               <option value="personalizado" disabled>Personalizado</option>
             </select>
+          </div>
+          <div className="tb-sep" />
+
+          <div className="tb-group">
+            <select
+              className="tb-btn tb-select"
+              value={s.lineHeight}
+              onChange={(e) => {
+                if (e.target.value) chain().setLineHeight(e.target.value).run();
+              }}
+              title="Espaçamento entre linhas"
+            >
+              <option value="">Esp. linhas</option>
+              <option value="1.0">Simples</option>
+              <option value="1.15">1.15</option>
+              <option value="1.5">1.5</option>
+              <option value="2.0">Duplo</option>
+              <option value="2.5">2.5</option>
+              <option value="3.0">Triplo</option>
+            </select>
+            <Btn onClick={() => chain().unsetLineHeight().run()} title="Espaçamento padrão" disabled={!s.lineHeight}>↺</Btn>
           </div>
           <div className="tb-sep" />
 

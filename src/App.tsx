@@ -17,6 +17,7 @@ import { SettingsModal } from "./SettingsModal";
 import { VersionHistory } from "./VersionHistory";
 import { pickImageDataUri } from "./lib/images";
 import { exportToPdf } from "./lib/pdf";
+import { DocTemplate } from "./lib/templates";
 import {
   DocFile,
   baseName,
@@ -363,6 +364,55 @@ function App() {
     [updateSettings]
   );
 
+  // ---- Templates ----
+  const handleApplyTemplate = useCallback(
+    (tmpl: DocTemplate) => {
+      updateSettings({
+        pageFormat: tmpl.pageFormat,
+        pageMargins: tmpl.margins,
+      });
+      if (!editor) return;
+      // Apply content formatting (font, size, line-height, alignment)
+      const { doc } = editor.state;
+      const ops: (() => boolean)[] = [];
+
+      doc.descendants((node, pos) => {
+        if (!node.type.isText && node.content.size === 0) return;
+
+        // Font family + size via textStyle mark
+        const markAttrs: Record<string, string> = {};
+        if (tmpl.fontFamily) markAttrs.fontFamily = tmpl.fontFamily;
+        if (tmpl.fontSize) markAttrs.fontSize = tmpl.fontSize;
+        if (Object.keys(markAttrs).length > 0) {
+          const from = pos;
+          const to = pos + node.nodeSize;
+          ops.push(() =>
+            editor.chain().setTextSelection({ from, to }).setMark("textStyle", markAttrs).run()
+          );
+        }
+
+        // Line height via node attribute
+        if (tmpl.lineHeight && (node.type.name === "paragraph" || node.type.name === "heading")) {
+          ops.push(() =>
+            editor.chain().setTextSelection({ from: pos, to: pos + node.nodeSize })
+              .updateAttributes(node.type.name, { lineHeight: tmpl.lineHeight }).run()
+          );
+        }
+
+        // Text alignment
+        if (tmpl.textAlign && (node.type.name === "paragraph" || node.type.name === "heading")) {
+          ops.push(() =>
+            editor.chain().setTextSelection({ from: pos, to: pos + node.nodeSize })
+              .setTextAlign(tmpl.textAlign!).run()
+          );
+        }
+      });
+
+      ops.forEach((fn) => fn());
+    },
+    [editor, updateSettings]
+  );
+
   // ---- Versioning ----
   const handleSaveVersion = useCallback(
     async (name: string) => {
@@ -583,6 +633,7 @@ function App() {
           systemFonts={systemFonts}
           customFonts={customFonts}
           onImportFont={handleImportFont}
+          onApplyTemplate={handleApplyTemplate}
         />
       )}
       {editor && <AiBubbleMenu editor={editor} ai={ai} onOpenPanel={() => setAiOpen(true)} />}
