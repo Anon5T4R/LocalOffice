@@ -191,6 +191,36 @@ body {
   color: var(--text);
 }
 
+/* Numeric input for font size (accepts typed values) */
+.tb-size-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.tb-size-input {
+  width: 64px;
+  height: 30px;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 12px;
+  text-align: center;
+  -moz-appearance: textfield;
+}
+
+.tb-size-input::-webkit-inner-spin-button,
+.tb-size-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.tb-size-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
 .tb-filename {
   font-size: 12px;
   color: var(--muted);

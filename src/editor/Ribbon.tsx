@@ -185,19 +185,27 @@ export function Ribbon({
             <Btn onClick={onImportFont} title="Importar fonte">+F</Btn>
           </div>
           <div className="tb-group">
-            <select
-              className="tb-btn tb-select"
-              value={s.fontSize ? parseInt(s.fontSize).toString() : ""}
-              onChange={(e) => {
-                if (e.target.value) chain().setFontSize(e.target.value + "px").run();
-              }}
-              title="Tamanho da fonte"
-            >
-              <option value="">Tamanho</option>
-              {[8, 9, 10, 11, 12, 14, 16, 18, 20, 22, 24, 28, 36, 48, 72].map((s) => (
-                <option key={s} value={s}>{s}</option>
-              ))}
-            </select>
+            <div className="tb-size-wrap">
+              <input
+                className="tb-size-input"
+                type="number"
+                min={1}
+                max={999}
+                value={s.fontSize ? parseInt(s.fontSize).toString() : ""}
+                placeholder="Tam."
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (v) chain().setFontSize(v + "px").run();
+                }}
+                title="Tamanho da fonte (digite um valor ou selecione)"
+                list="font-sizes"
+              />
+              <datalist id="font-sizes">
+                {[8, 9, 10, 11, 12, 14, 16, 18, 20, 22, 24, 28, 36, 48, 72].map((s) => (
+                  <option key={s} value={s} />
+                ))}
+              </datalist>
+            </div>
             <Btn onClick={() => chain().unsetFontSize().run()} title="Tamanho padrão" disabled={!s.fontSize}>↺</Btn>
           </div>
           <div className="tb-sep" />
