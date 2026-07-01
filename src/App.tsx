@@ -48,6 +48,27 @@ const PAGE_DIMS: Record<string, { width: string; height: string; pxHeight: numbe
   a3: { width: "297mm", height: "420mm", pxHeight: 1587 },
 };
 
+/** Divide content into non-overlapping page segments bounded by manual page breaks. */
+function calcGhostOffsets(scrollHeight: number, pageH: number, breaks: number[]): number[] {
+  const offsets: number[] = [];
+  if (breaks.length === 0) {
+    const pages = Math.ceil(scrollHeight / pageH);
+    for (let i = 1; i < pages; i++) offsets.push(i * pageH);
+    return offsets;
+  }
+  const boundaries = [0, ...breaks, scrollHeight];
+  for (let i = 0; i < boundaries.length - 1; i++) {
+    const start = boundaries[i];
+    const end = boundaries[i + 1];
+    const pagesInSeg = Math.ceil((end - start) / pageH);
+    for (let p = 0; p < pagesInSeg; p++) {
+      const off = start + p * pageH;
+      if (off > 0) offsets.push(off);
+    }
+  }
+  return offsets;
+}
+
 function App() {
   const first = useRef<Tab>(newTab());
   const [tabs, setTabs] = useState<Tab[]>(() => [first.current]);
@@ -61,7 +82,7 @@ function App() {
   const [showSearch, setShowSearch] = useState(false);
   const [showVersionHistory, setShowVersionHistory] = useState(false);
   const [systemFonts, setSystemFonts] = useState<string[]>([]);
-  const [ghostPageCount, setGhostPageCount] = useState(0);
+  const [ghostOffsets, setGhostOffsets] = useState<number[]>([]);
   const [ghostHtml, setGhostHtml] = useState("");
 
   const pageFormat = settings.pageFormat || "classic";
@@ -151,15 +172,23 @@ function App() {
   // Recalculate ghost pages
   useEffect(() => {
     if (!editor || !isPaginated) {
-      setGhostPageCount(0);
+      setGhostOffsets([]);
       setGhostHtml("");
       return;
     }
     const el = editor.view.dom;
     const totalH = el.scrollHeight;
     const pageH = dims.pxHeight;
-    const count = Math.max(1, Math.ceil(totalH / pageH));
-    setGhostPageCount(count);
+    const rect = el.getBoundingClientRect();
+    const positions: number[] = [];
+    el.querySelectorAll<HTMLElement>("[data-page-break]").forEach((b) => {
+      const r = b.getBoundingClientRect();
+      positions.push(r.bottom - rect.top);
+    });
+    positions.sort((a, b) => a - b);
+    const breaks = positions.filter((p, i) => p > 0 && p < totalH && (i === 0 || p > positions[i - 1] + 1));
+    const offsets = calcGhostOffsets(totalH, pageH, breaks);
+    setGhostOffsets(offsets);
     setGhostHtml(editor.getHTML());
   }, [editor, pageFormat, dims.pxHeight, isPaginated]);
 
@@ -170,8 +199,16 @@ function App() {
       const el = editor.view.dom;
       const totalH = el.scrollHeight;
       const pageH = dims.pxHeight;
-      const count = Math.max(1, Math.ceil(totalH / pageH));
-      setGhostPageCount(count);
+      const rect = el.getBoundingClientRect();
+      const positions: number[] = [];
+      el.querySelectorAll<HTMLElement>("[data-page-break]").forEach((b) => {
+        const r = b.getBoundingClientRect();
+        positions.push(r.bottom - rect.top);
+      });
+      positions.sort((a, b) => a - b);
+      const breaks = positions.filter((p, i) => p > 0 && p < totalH && (i === 0 || p > positions[i - 1] + 1));
+      const offsets = calcGhostOffsets(totalH, pageH, breaks);
+      setGhostOffsets(offsets);
       setGhostHtml(editor.getHTML());
     });
     ro.observe(editor.view.dom);
@@ -597,13 +634,6 @@ function App() {
 
   const activeTab = tabs.find((t) => t.id === activeId);
 
-  // Use a ref to measure page height in px for ghost calculations
-  const ghostOffsetPx = useMemo(() => {
-    if (!isPaginated) return [];
-    const ph = dims.pxHeight;
-    return Array.from({ length: Math.max(0, ghostPageCount - 1) }, (_, i) => (i + 1) * ph);
-  }, [isPaginated, dims.pxHeight, ghostPageCount]);
-
   return (
     <div className="app">
       <MenuBar
@@ -647,7 +677,7 @@ function App() {
                 <EditorContent editor={editor} />
               </div>
               {isPaginated &&
-                ghostOffsetPx.map((offset, i) => (
+                ghostOffsets.map((offset, i) => (
                   <div key={i} className="page fixed" style={{ width: dims.width, height: dims.height }}>
                     <div
                       className="page-ghost ProseMirror"
