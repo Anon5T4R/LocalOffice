@@ -17,8 +17,8 @@ const turndown = new TurndownService({
 // GFM: tables, strikethrough, task lists.
 turndown.use(gfm);
 
-export function markdownToHtml(md: string): string {
-  return marked.parse(md, { async: false }) as string;
+export async function markdownToHtml(md: string): Promise<string> {
+  return (await marked.parse(md)) as string;
 }
 
 export function htmlToMarkdown(html: string): string {

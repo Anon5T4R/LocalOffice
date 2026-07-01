@@ -31,7 +31,7 @@ async function readToHtml(path: string, format: DocFormat): Promise<string> {
     return invoke<string>("import_via_pandoc", { path, from: format });
   }
   const raw = await invoke<string>("read_text_file", { path });
-  return format === "markdown" ? markdownToHtml(raw) : raw;
+  return format === "markdown" ? await markdownToHtml(raw) : raw;
 }
 
 /** Write editor HTML to disk in the given format. */

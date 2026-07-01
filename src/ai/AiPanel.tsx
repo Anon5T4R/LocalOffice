@@ -23,7 +23,8 @@ export function AiPanel({ editor, ai, onClose }: AiPanelProps) {
     const at = r.to || editor?.state.selection.to || editor?.state.doc.content.size || 0;
     editor?.chain().focus().insertContentAt(at, "\n" + text).run();
   };
-  const copy = (text: string) => navigator.clipboard?.writeText(text).catch(() => {});
+  const copy = (text: string) =>
+    navigator.clipboard?.writeText(text).catch((e) => console.error("clipboard:", e));
 
   const statusDot =
     ai.status === "ready" ? "#22c55e" : ai.status === "loading" ? "#eab308" : ai.status === "error" ? "#ef4444" : "#9ca3af";
