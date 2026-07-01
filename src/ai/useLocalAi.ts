@@ -87,13 +87,18 @@ export function useLocalAi(
   ctxRef.current = ctx;
 
   useEffect(() => {
+    let cancelled = false;
     llmStatus().then((s) => {
+      if (cancelled) return;
       if (s.running) {
         portRef.current = s.port;
         setStatus("ready");
         setModelPath(s.model);
       }
     });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const scan = useCallback(async () => {
@@ -229,7 +234,7 @@ export function useLocalAi(
     if (!editor || status !== "ready" || streaming) return;
     // Budget ~55% of the context (chars) for input; leave room for prompt + output.
     const maxChars = Math.max(800, Math.floor(ctxRef.current * 4 * 0.55));
-    const chunks = chunkDocument(editor, maxChars);
+    const chunks = await chunkDocument(editor, maxChars);
     if (!chunks.length || !chunks[0].trim()) {
       setStatusMsg("O documento está vazio.");
       return;

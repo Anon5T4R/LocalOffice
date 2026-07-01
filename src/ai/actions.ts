@@ -71,8 +71,10 @@ export function estimateTokens(text: string): number {
  * Split the document into chunks that each fit `maxChars`, breaking preferably at
  * headings. Used by the whole-document summary (map-reduce). Falls back to packing
  * paragraphs when there are no headings.
+ *
+ * Yields to the event loop every 100 blocks to avoid blocking the UI on large docs.
  */
-export function chunkDocument(editor: Editor, maxChars: number): string[] {
+export async function chunkDocument(editor: Editor, maxChars: number): Promise<string[]> {
   const blocks: { heading: boolean; text: string }[] = [];
   editor.state.doc.forEach((node) => {
     const text = node.textContent.trim();
@@ -81,17 +83,18 @@ export function chunkDocument(editor: Editor, maxChars: number): string[] {
 
   const chunks: string[] = [];
   let cur = "";
-  for (const b of blocks) {
+  for (let i = 0; i < blocks.length; i++) {
+    if (i > 0 && i % 100 === 0) {
+      await new Promise<void>((r) => setTimeout(r, 0));
+    }
+    const b = blocks[i];
     const piece = (b.heading ? "\n## " : "") + b.text;
-    // Start a new chunk at a heading if the current one already has content,
-    // or whenever adding this block would overflow.
     if (cur && (cur.length + piece.length > maxChars || (b.heading && cur.length > maxChars * 0.5))) {
       chunks.push(cur.trim());
       cur = "";
     }
-    // A single block bigger than the budget is hard-split.
     if (piece.length > maxChars) {
-      for (let i = 0; i < piece.length; i += maxChars) chunks.push(piece.slice(i, i + maxChars).trim());
+      for (let j = 0; j < piece.length; j += maxChars) chunks.push(piece.slice(j, j + maxChars).trim());
     } else {
       cur += (cur ? "\n\n" : "") + piece;
     }

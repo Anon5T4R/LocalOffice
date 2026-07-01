@@ -1,11 +1,13 @@
 use std::fs;
-use std::net::{SocketAddr, TcpStream};
+use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command};
 use std::sync::Mutex;
 use std::time::Duration;
 use tauri::{Emitter, Manager, State};
 use tauri_plugin_shell::ShellExt;
+use tokio::net::TcpStream;
+use tokio::time::sleep;
 
 // ---------------------------------------------------------------------------
 // File I/O
@@ -13,28 +15,35 @@ use tauri_plugin_shell::ShellExt;
 
 /// Read a UTF-8 text file from disk (used for .md, .txt, .html).
 #[tauri::command]
-fn read_text_file(path: String) -> Result<String, String> {
-    fs::read_to_string(&path).map_err(|e| format!("Falha ao ler '{}': {}", path, e))
+async fn read_text_file(path: String) -> Result<String, String> {
+    tokio::fs::read_to_string(&path)
+        .await
+        .map_err(|e| format!("Falha ao ler '{}': {}", path, e))
 }
 
 /// Read any file and return its contents base64-encoded (used to embed images).
 #[tauri::command]
-fn read_file_base64(path: String) -> Result<String, String> {
+async fn read_file_base64(path: String) -> Result<String, String> {
     use base64::Engine;
-    let bytes = fs::read(&path).map_err(|e| format!("Falha ao ler '{}': {}", path, e))?;
+    let bytes = tokio::fs::read(&path)
+        .await
+        .map_err(|e| format!("Falha ao ler '{}': {}", path, e))?;
     Ok(base64::engine::general_purpose::STANDARD.encode(bytes))
 }
 
 /// Write a UTF-8 text file to disk, creating parent dirs if needed.
 #[tauri::command]
-fn write_text_file(path: String, contents: String) -> Result<(), String> {
+async fn write_text_file(path: String, contents: String) -> Result<(), String> {
     if let Some(parent) = Path::new(&path).parent() {
         if !parent.as_os_str().is_empty() {
-            fs::create_dir_all(parent)
+            tokio::fs::create_dir_all(parent)
+                .await
                 .map_err(|e| format!("Falha ao criar diretório '{}': {}", parent.display(), e))?;
         }
     }
-    fs::write(&path, contents).map_err(|e| format!("Falha ao salvar '{}': {}", path, e))
+    tokio::fs::write(&path, contents)
+        .await
+        .map_err(|e| format!("Falha ao salvar '{}': {}", path, e))
 }
 
 // ---------------------------------------------------------------------------
@@ -150,14 +159,20 @@ fn collect_gguf(dir: &Path, base: &Path, out: &mut Vec<ModelInfo>) {
 
 /// List all .gguf models found (recursively) under `dir`.
 #[tauri::command]
-fn list_models(dir: String) -> Result<Vec<ModelInfo>, String> {
+async fn list_models(dir: String) -> Result<Vec<ModelInfo>, String> {
     let base = PathBuf::from(&dir);
     if !base.exists() {
         return Err(format!("Pasta de modelos não encontrada: {}", dir));
     }
-    let mut out = Vec::new();
-    collect_gguf(&base, &base, &mut out);
-    out.sort_by(|a, b| a.size_gb.partial_cmp(&b.size_gb).unwrap_or(std::cmp::Ordering::Equal));
+    let base_for_blocking = base.clone();
+    let out = tokio::task::spawn_blocking(move || {
+        let mut out = Vec::new();
+        collect_gguf(&base_for_blocking, &base_for_blocking, &mut out);
+        out.sort_by(|a, b| a.size_gb.partial_cmp(&b.size_gb).unwrap_or(std::cmp::Ordering::Equal));
+        out
+    })
+    .await
+    .map_err(|e| format!("erro ao escanear modelos: {}", e))?;
     Ok(out)
 }
 
@@ -205,21 +220,22 @@ fn exit_app(app: tauri::AppHandle) {
 }
 
 /// Block until the given TCP port accepts a connection, or time out.
-fn wait_for_port(port: u16, secs: u64) -> Result<(), String> {
+async fn wait_for_port(port: u16, secs: u64) -> Result<(), String> {
     let addr: SocketAddr = ([127, 0, 0, 1], port).into();
     let attempts = secs * 4;
     for _ in 0..attempts {
-        if TcpStream::connect_timeout(&addr, Duration::from_millis(200)).is_ok() {
-            return Ok(());
+        match tokio::time::timeout(Duration::from_millis(200), TcpStream::connect(addr)).await {
+            Ok(Ok(_)) => return Ok(()),
+            _ => {}
         }
-        std::thread::sleep(Duration::from_millis(250));
+        sleep(Duration::from_millis(250)).await;
     }
     Err("llama-server não respondeu a tempo".into())
 }
 
 /// Start (or restart) llama-server with the chosen model. Returns the port.
 #[tauri::command]
-fn start_llm(
+async fn start_llm(
     app: tauri::AppHandle,
     state: State<'_, Mutex<LlmState>>,
     model_path: String,
@@ -273,7 +289,7 @@ fn start_llm(
         s.model = model_path;
     }
 
-    wait_for_port(port, 180)?;
+    wait_for_port(port, 180).await?;
     Ok(port)
 }
 

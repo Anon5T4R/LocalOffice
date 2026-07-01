@@ -79,6 +79,8 @@ function App() {
   const autosaveTimer = useRef<number | null>(null);
   const firstDirtyAt = useRef(0);
 
+  const savingRef = useRef(false);
+
   const cancelAutosave = useCallback(() => {
     if (autosaveTimer.current) {
       clearTimeout(autosaveTimer.current);
@@ -249,7 +251,10 @@ function App() {
   // The Rust side intercepts the window close and emits "close-requested".
   // We confirm here (we know which tabs are unsaved) and then quit via exit_app.
   useEffect(() => {
-    const unlistenPromise = listen("close-requested", async () => {
+    let cancelled = false;
+    let unlisten: (() => void) | null = null;
+
+    listen("close-requested", async () => {
       try {
         const dirtyCount = tabsRef.current.filter((t) => t.dirty).length;
         if (dirtyCount > 0) {
@@ -262,24 +267,34 @@ function App() {
       } catch {
         /* if the dialog fails, fall through to exit so the user isn't trapped */
       }
-      invoke("exit_app").catch(() => {});
+      invoke("exit_app").catch((e) => console.error("exit_app:", e));
+    }).then((un) => {
+      if (cancelled) { un(); return; }
+      unlisten = un;
     });
+
     return () => {
-      unlistenPromise.then((un) => un());
+      cancelled = true;
+      unlisten?.();
     };
   }, []);
 
   // ---- Debounced autosave (only when idle; never while actively typing) ----
   const doAutosave = useCallback(() => {
+    if (savingRef.current) return;
     autosaveTimer.current = null;
     firstDirtyAt.current = 0;
     if (!editor) return;
     const at = tabsRef.current.find((t) => t.id === activeIdRef.current);
     if (at && at.filePath && at.dirty) {
       const id = at.id;
+      savingRef.current = true;
       saveDocumentTo(at.filePath, editor.getHTML(), at.format)
-        .then(() => setTabs((ts) => ts.map((t) => (t.id === id ? { ...t, dirty: false } : t))))
-        .catch(() => {});
+        .then(() => {
+          setTabs((ts) => ts.map((t) => (t.id === id ? { ...t, dirty: false } : t)));
+          savingRef.current = false;
+        })
+        .catch(() => { savingRef.current = false; });
     }
   }, [editor]);
 
@@ -313,15 +328,31 @@ function App() {
     if (!editor || openedStartup.current) return;
     openedStartup.current = true;
     invoke<string | null>("get_startup_file")
-      .then((p) => {
-        if (p) openDocumentPath(p).then(openDocFile).catch(() => {});
+      .then(async (p) => {
+        if (p) {
+          try {
+            openDocFile(await openDocumentPath(p));
+          } catch {}
+        }
       })
       .catch(() => {});
-    const un = listen<string>("open-file", (e) => {
-      if (e.payload) openDocumentPath(e.payload).then(openDocFile).catch(() => {});
+
+    let cancelled = false;
+    let unlisten: (() => void) | null = null;
+    listen<string>("open-file", async (e) => {
+      if (e.payload) {
+        try {
+          openDocFile(await openDocumentPath(e.payload));
+        } catch {}
+      }
+    }).then((un) => {
+      if (cancelled) { un(); return; }
+      unlisten = un;
     });
+
     return () => {
-      un.then((f) => f());
+      cancelled = true;
+      unlisten?.();
     };
   }, [editor, openDocFile]);
 

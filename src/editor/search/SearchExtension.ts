@@ -12,6 +12,8 @@ export interface SearchState {
   term: string;
   results: Match[];
   current: number;
+  /** Timestamp of the last recomputation, used to throttle on document changes. */
+  lastRecompute: number;
 }
 
 export const searchKey = new PluginKey<SearchState>("search");
@@ -61,17 +63,28 @@ export const SearchExtension = Extension.create({
       new Plugin<SearchState>({
         key: searchKey,
         state: {
-          init: () => ({ term: "", results: [], current: 0 }),
+          init: () => ({ term: "", results: [], current: 0, lastRecompute: 0 }),
           apply(tr, value, _old, newState) {
             const meta = tr.getMeta(searchKey) as Partial<SearchState> | undefined;
-            let next = value;
-            if (meta) next = { ...value, ...meta };
-            // Keep results in sync when the document changes under an active search.
-            if (!meta && tr.docChanged && next.term) {
-              const results = computeResults(newState.doc, next.term);
-              next = { ...next, results, current: Math.min(next.current, Math.max(0, results.length - 1)) };
+            if (meta) {
+              return { ...value, ...meta, lastRecompute: Date.now() };
             }
-            return next;
+            // Throttle auto-recompute to at most once every 200ms while typing.
+            if (tr.docChanged && value.term) {
+              const now = Date.now();
+              if (now - value.lastRecompute > 200) {
+                const results = computeResults(newState.doc, value.term);
+                return {
+                  ...value,
+                  results,
+                  current: Math.min(value.current, Math.max(0, results.length - 1)),
+                  lastRecompute: now,
+                };
+              }
+              // Within throttle window — keep stale results until the user pauses.
+              return value;
+            }
+            return value;
           },
         },
         props: {
