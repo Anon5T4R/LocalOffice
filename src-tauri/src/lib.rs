@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::fs;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
@@ -306,6 +307,281 @@ fn stop_llm(state: State<'_, Mutex<LlmState>>) -> Result<(), String> {
     Ok(())
 }
 
+// ---------------------------------------------------------------------------
+// Font management
+// ---------------------------------------------------------------------------
+
+#[derive(serde::Serialize)]
+struct FontInfo {
+    name: String,
+    base64: String,
+}
+
+/// Scan standard system font directories and return unique font family names.
+#[tauri::command]
+async fn list_system_fonts() -> Result<Vec<String>, String> {
+    let dirs = font_search_dirs();
+    let mut names = HashSet::new();
+    for dir in dirs {
+        scan_font_dir(&dir, &mut names);
+    }
+    let mut sorted: Vec<_> = names.into_iter().collect();
+    sorted.sort_by(|a, b| a.to_lowercase().cmp(&b.to_lowercase()));
+    Ok(sorted)
+}
+
+/// Read a font file, extract its family name, and return base64 data + name.
+#[tauri::command]
+async fn import_font(path: String) -> Result<FontInfo, String> {
+    use base64::Engine;
+    let data = tokio::fs::read(&path)
+        .await
+        .map_err(|e| format!("Falha ao ler fonte '{}': {}", path, e))?;
+    let name = extract_font_name(&data)
+        .unwrap_or_else(|| {
+            Path::new(&path)
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("Fonte")
+                .to_string()
+        });
+    let base64 = base64::engine::general_purpose::STANDARD.encode(&data);
+    Ok(FontInfo { name, base64 })
+}
+
+fn font_search_dirs() -> Vec<PathBuf> {
+    let mut dirs = Vec::new();
+    // Windows
+    if cfg!(windows) {
+        let win_dir = std::env::var("WINDIR").unwrap_or_else(|_| "C:\\Windows".into());
+        dirs.push(PathBuf::from(&win_dir).join("Fonts"));
+        if let Ok(local) = std::env::var("LOCALAPPDATA") {
+            dirs.push(PathBuf::from(local).join(r"Microsoft\Windows\Fonts"));
+        }
+    }
+    // macOS
+    if cfg!(target_os = "macos") {
+        dirs.push(PathBuf::from("/System/Library/Fonts"));
+        dirs.push(PathBuf::from("/Library/Fonts"));
+        if let Ok(home) = std::env::var("HOME") {
+            dirs.push(PathBuf::from(&home).join("Library/Fonts"));
+        }
+    }
+    // Linux
+    if cfg!(unix) && !cfg!(target_os = "macos") {
+        dirs.push(PathBuf::from("/usr/share/fonts"));
+        dirs.push(PathBuf::from("/usr/local/share/fonts"));
+        if let Ok(home) = std::env::var("HOME") {
+            dirs.push(PathBuf::from(&home).join(".fonts"));
+            dirs.push(PathBuf::from(&home).join(".local/share/fonts"));
+        }
+    }
+    dirs
+}
+
+fn scan_font_dir(dir: &Path, names: &mut HashSet<String>) {
+    let entries = match fs::read_dir(dir) {
+        Ok(e) => e,
+        Err(_) => return,
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            scan_font_dir(&path, names);
+        } else {
+            let ext = path
+                .extension()
+                .and_then(|e| e.to_str())
+                .map(|e| e.to_lowercase())
+                .unwrap_or_default();
+            if ext != "ttf" && ext != "otf" && ext != "ttc" {
+                continue;
+            }
+            let data = match fs::read(&path) {
+                Ok(d) => d,
+                Err(_) => continue,
+            };
+            if let Some(name) = extract_font_name(&data) {
+                names.insert(name);
+            }
+        }
+    }
+}
+
+fn extract_font_name(data: &[u8]) -> Option<String> {
+    let face = ttf_parser::Face::parse(data, 0).ok()?;
+    for name in face.names() {
+        let id = name.name_id;
+        if id == ttf_parser::name_id::FULL_NAME
+            || id == ttf_parser::name_id::FAMILY
+        {
+            if let Some(s) = name.to_string() {
+                if !s.is_empty() {
+                    return Some(s);
+                }
+            }
+        }
+    }
+    None
+}
+
+// ---------------------------------------------------------------------------
+// Document versioning
+// ---------------------------------------------------------------------------
+
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+struct VersionEntry {
+    id: String,
+    name: String,
+    ts: u64,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+struct VersionMeta {
+    doc_path: String,
+    versions: Vec<VersionEntry>,
+}
+
+#[derive(serde::Serialize)]
+struct VersionInfo {
+    id: String,
+    name: String,
+    ts: u64,
+    has_content: bool,
+}
+
+fn versions_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("data dir: {}", e))?
+        .join("versions");
+    fs::create_dir_all(&dir).map_err(|e| format!("criar versions dir: {}", e))?;
+    Ok(dir)
+}
+
+fn version_slug(doc_path: &str) -> String {
+    use std::hash::{Hash, Hasher};
+    use std::collections::hash_map::DefaultHasher;
+    let mut h = DefaultHasher::new();
+    doc_path.hash(&mut h);
+    format!("v_{:x}", h.finish())
+}
+
+fn version_meta_path(app: &tauri::AppHandle, doc_path: &str) -> Result<PathBuf, String> {
+    Ok(versions_dir(app)?.join(format!("{}.json", version_slug(doc_path))))
+}
+
+fn version_content_path(
+    app: &tauri::AppHandle,
+    doc_path: &str,
+    version_id: &str,
+) -> Result<PathBuf, String> {
+    Ok(versions_dir(app)?
+        .join(format!("{}_{}.json", version_slug(doc_path), version_id)))
+}
+
+fn read_meta(app: &tauri::AppHandle, doc_path: &str) -> Result<VersionMeta, String> {
+    let path = version_meta_path(app, doc_path)?;
+    if !path.exists() {
+        return Ok(VersionMeta { doc_path: doc_path.to_string(), versions: Vec::new() });
+    }
+    let raw =
+        fs::read_to_string(&path).map_err(|e| format!("ler meta: {}", e))?;
+    serde_json::from_str(&raw).map_err(|e| format!("parse meta: {}", e))
+}
+
+fn write_meta(app: &tauri::AppHandle, meta: &VersionMeta) -> Result<(), String> {
+    let path = version_meta_path(app, &meta.doc_path)?;
+    let raw = serde_json::to_string_pretty(meta).map_err(|e| format!("serializar meta: {}", e))?;
+    fs::write(&path, raw).map_err(|e| format!("salvar meta: {}", e))
+}
+
+/// Save a named version of the document.
+#[tauri::command]
+async fn save_version(
+    app: tauri::AppHandle,
+    doc_path: String,
+    name: String,
+    content: String,
+) -> Result<(), String> {
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let id = format!("v_{}", ts);
+
+    // Save content
+    let cpath = version_content_path(&app, &doc_path, &id)?;
+    tokio::fs::write(&cpath, &content)
+        .await
+        .map_err(|e| format!("salvar versão: {}", e))?;
+
+    // Update meta
+    let mut meta = read_meta(&app, &doc_path)?;
+    meta.versions.push(VersionEntry {
+        id: id.clone(),
+        name,
+        ts,
+    });
+    write_meta(&app, &meta)?;
+    Ok(())
+}
+
+/// List all versions of a document.
+#[tauri::command]
+async fn list_versions(
+    app: tauri::AppHandle,
+    doc_path: String,
+) -> Result<Vec<VersionInfo>, String> {
+    let meta = read_meta(&app, &doc_path)?;
+    let mut out: Vec<VersionInfo> = meta
+        .versions
+        .into_iter()
+        .map(|v| {
+            let cpath = version_content_path(&app, &doc_path, &v.id).ok();
+            let has = cpath.as_ref().map(|p| p.exists()).unwrap_or(false);
+            VersionInfo {
+                id: v.id,
+                name: v.name,
+                ts: v.ts,
+                has_content: has,
+            }
+        })
+        .collect();
+    out.sort_by(|a, b| b.ts.cmp(&a.ts)); // newest first
+    Ok(out)
+}
+
+/// Load a specific version's content.
+#[tauri::command]
+async fn load_version(
+    app: tauri::AppHandle,
+    doc_path: String,
+    version_id: String,
+) -> Result<String, String> {
+    let cpath = version_content_path(&app, &doc_path, &version_id)?;
+    tokio::fs::read_to_string(&cpath)
+        .await
+        .map_err(|e| format!("ler versão: {}", e))
+}
+
+/// Delete a specific version.
+#[tauri::command]
+async fn delete_version(
+    app: tauri::AppHandle,
+    doc_path: String,
+    version_id: String,
+) -> Result<(), String> {
+    // Delete content file
+    let cpath = version_content_path(&app, &doc_path, &version_id)?;
+    let _ = tokio::fs::remove_file(&cpath).await;
+    // Remove from meta
+    let mut meta = read_meta(&app, &doc_path)?;
+    meta.versions.retain(|v| v.id != version_id);
+    write_meta(&app, &meta)
+}
+
 /// Report whether llama-server is currently running.
 #[tauri::command]
 fn llm_status(state: State<'_, Mutex<LlmState>>) -> LlmStatus {
@@ -359,7 +635,13 @@ pub fn run() {
             stop_llm,
             llm_status,
             get_startup_file,
-            exit_app
+            exit_app,
+            list_system_fonts,
+            import_font,
+            save_version,
+            list_versions,
+            load_version,
+            delete_version
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
