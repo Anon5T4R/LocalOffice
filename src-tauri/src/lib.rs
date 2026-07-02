@@ -141,6 +141,25 @@ struct LlmState {
     model: String,
 }
 
+/// Lock the LLM state even if a previous holder panicked. The state is just an
+/// `Option<Child>` plus plain values — it can't be left logically inconsistent,
+/// so recovering from a poisoned lock is always safe (and crashing the command
+/// over it would take the whole backend down with it).
+fn lock_llm(m: &Mutex<LlmState>) -> std::sync::MutexGuard<'_, LlmState> {
+    m.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+/// Kill a llama-server child and reap it. `wait` blocks until process teardown
+/// finishes, so this runs off the async runtime threads.
+async fn kill_llm_child(mut child: Child) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || {
+        let _ = child.kill();
+        let _ = child.wait();
+    })
+    .await
+    .map_err(|e| format!("falha ao encerrar llama-server: {}", e))
+}
+
 #[derive(serde::Serialize)]
 struct ModelInfo {
     name: String,
@@ -273,13 +292,9 @@ async fn start_llm(
     ctx_size: u32,
 ) -> Result<u16, String> {
     // Stop any running instance first.
-    {
-        let mut s = state.lock().map_err(|_| "estado da IA corrompido")?;
-        if let Some(child) = s.child.as_mut() {
-            let _ = child.kill();
-            let _ = child.wait();
-        }
-        s.child = None;
+    let old = lock_llm(&state).child.take();
+    if let Some(child) = old {
+        kill_llm_child(child).await?;
     }
 
     let exe = resolve_llama_server(&app)?;
@@ -313,7 +328,7 @@ async fn start_llm(
         .map_err(|e| format!("falha ao iniciar llama-server: {}", e))?;
 
     {
-        let mut s = state.lock().map_err(|_| "estado da IA corrompido")?;
+        let mut s = lock_llm(&state);
         s.child = Some(child);
         s.port = port;
         s.model = model_path;
@@ -325,14 +340,15 @@ async fn start_llm(
 
 /// Stop the running llama-server, if any.
 #[tauri::command]
-fn stop_llm(state: State<'_, Mutex<LlmState>>) -> Result<(), String> {
-    let mut s = state.lock().map_err(|_| "estado da IA corrompido")?;
-    if let Some(child) = s.child.as_mut() {
-        let _ = child.kill();
-        let _ = child.wait();
+async fn stop_llm(state: State<'_, Mutex<LlmState>>) -> Result<(), String> {
+    let child = {
+        let mut s = lock_llm(&state);
+        s.model.clear();
+        s.child.take()
+    };
+    if let Some(child) = child {
+        kill_llm_child(child).await?;
     }
-    s.child = None;
-    s.model.clear();
     Ok(())
 }
 
@@ -648,7 +664,7 @@ async fn delete_version(
 /// Report whether llama-server is currently running.
 #[tauri::command]
 fn llm_status(state: State<'_, Mutex<LlmState>>) -> LlmStatus {
-    let mut s = state.lock().expect("estado da IA");
+    let mut s = lock_llm(&state);
     let running = match s.child.as_mut() {
         Some(child) => matches!(child.try_wait(), Ok(None)),
         None => false,
@@ -714,10 +730,8 @@ pub fn run() {
             // Ensure the llama-server child is killed when the app exits.
             if let tauri::RunEvent::Exit = event {
                 if let Some(state) = app_handle.try_state::<Mutex<LlmState>>() {
-                    if let Ok(mut s) = state.lock() {
-                        if let Some(child) = s.child.as_mut() {
-                            let _ = child.kill();
-                        }
+                    if let Some(child) = lock_llm(&state).child.as_mut() {
+                        let _ = child.kill();
                     }
                 }
             }
