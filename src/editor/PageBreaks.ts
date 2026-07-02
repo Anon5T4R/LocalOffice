@@ -51,7 +51,10 @@ export function recomputePageChrome(editor: Editor): void {
  */
 export interface SplitInfo {
   lineHeights: number[];
-  posOfLine: (i: number) => number;
+  /** In-paragraph document position where line `i` starts, or null when the
+   *  hit-test can't resolve one — the caller then treats the whole block as
+   *  atomic (unsplittable) instead of breaking at a wrong position. */
+  posOfLine: (i: number) => number | null;
 }
 
 export interface MeasuredBlock {
@@ -96,17 +99,43 @@ export function computeBreakPoints(blocks: MeasuredBlock[], printable: number): 
 
   for (const block of blocks) {
     const straddles = used + block.height > printable;
+    let split = false;
     if (block.splitLines && straddles && !block.isManualBreak) {
+      // Tentative line-level split, committed only if every needed break
+      // position resolves. A failed hit-test mid-paragraph must NOT emit a
+      // break at a wrong position (e.g. the block boundary, after earlier
+      // lines were already counted on the previous page) — the whole block
+      // falls back to atomic below instead.
       const info = block.splitLines();
+      const pending: PageBreakPoint[] = [];
+      let u = used;
+      let pn = pageNumber;
+      let force = forceBreakBefore;
+      let ok = true;
       for (let i = 0; i < info.lineHeights.length; i++) {
         const h = info.lineHeights[i];
-        if (forceBreakBefore || (used > 0 && used + h > printable)) {
-          breakBefore(i === 0 ? block.offset : info.posOfLine(i));
+        if (force || (u > 0 && u + h > printable)) {
+          const pos = i === 0 ? block.offset : info.posOfLine(i);
+          if (pos === null) {
+            ok = false;
+            break;
+          }
+          pn++;
+          pending.push({ offset: pos, pageNumber: pn });
+          u = 0;
         }
-        forceBreakBefore = false;
-        used += h;
+        force = false;
+        u += h;
       }
-    } else {
+      if (ok) {
+        points.push(...pending);
+        used = u;
+        pageNumber = pn;
+        forceBreakBefore = false;
+        split = true;
+      }
+    }
+    if (!split) {
       if (forceBreakBefore || (used > 0 && straddles)) breakBefore(block.offset);
       forceBreakBefore = false;
       used += block.height;
@@ -287,9 +316,9 @@ function measureSplit(view: EditorView, dom: HTMLElement, offset: number, blockH
       if (i === 0) return offset;
       const line = lines[i];
       const at = view.posAtCoords({ left: line.left + 1, top: (line.top + line.bottom) / 2 });
-      // Fallback to the block boundary if the hit-test misses (rare): the
-      // paragraph just moves whole instead of splitting at that line.
-      return at ? at.pos : offset;
+      // null when the hit-test misses (rare): computeBreakPoints then keeps
+      // the paragraph atomic instead of breaking at a wrong position.
+      return at ? at.pos : null;
     },
   };
 }

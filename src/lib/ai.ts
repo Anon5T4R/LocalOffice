@@ -20,7 +20,10 @@ export interface ChatMsg {
   reasoning?: string;
 }
 
-export const DEFAULT_MODELS_DIR = "D:\\LocalAIModels\\.lmstudio\\hub\\models";
+// No default models directory: it's machine-specific (LM Studio, ollama
+// exports, a plain folder…). Empty means "not configured yet" — the AI panel
+// asks the user to pick a folder instead of scanning a guessed path.
+export const DEFAULT_MODELS_DIR = "";
 
 // --- Rust command wrappers (snake_case keys to match the Rust params) ---
 

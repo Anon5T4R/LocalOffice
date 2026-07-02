@@ -86,6 +86,23 @@ describe("computeBreakPoints", () => {
     expect(posCalls).toEqual([2]);
   });
 
+  it("M2: hit-test falhando (posOfLine null) cai para bloco atômico, sem quebra em posição errada", () => {
+    const filler = { offset: 0, height: 600, isManualBreak: false };
+    const para = {
+      offset: 10,
+      height: 800, // estoura (600+800 > 1000) -> tenta dividir
+      isManualBreak: false,
+      splitLines: () => ({
+        lineHeights: [400, 400],
+        posOfLine: (i: number) => (i === 0 ? 10 : null), // linha 2 não resolve
+      }),
+    };
+    const points = computeBreakPoints([filler, para], 1000);
+    // fallback atômico: uma única quebra, no limite do bloco (offset 10) --
+    // nunca uma quebra em posição inventada no meio do parágrafo.
+    expect(points).toEqual([{ offset: 10, pageNumber: 2 }]);
+  });
+
   it("M2: parágrafo divisível que cabe na sobra NÃO chama splitLines (custo evitado)", () => {
     let called = false;
     const filler = { offset: 0, height: 900, isManualBreak: false };

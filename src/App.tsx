@@ -30,6 +30,7 @@ import { EditorProvider } from "./state/EditorContext";
 import { PAGE_SIZES } from "./lib/pageGeometry";
 import { effectiveLayoutFor, patchDocLayout, type DocLayout } from "./editor/DocLayout";
 import { recomputePageChrome } from "./editor/PageBreaks";
+import "./editor/contentStyles";
 import "./App.css";
 
 function App() {
