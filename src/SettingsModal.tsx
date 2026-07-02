@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { HeaderFooterSpec, Theme, clearRecents } from "./lib/settings";
+import type { DocLayout } from "./editor/DocLayout";
 import * as citationStore from "./lib/citationStore";
 import { useSettings } from "./state/SettingsContext";
 import { Modal } from "./components/Modal";
@@ -15,6 +16,9 @@ const CSL_STYLE_OPTIONS = [
 
 interface SettingsModalProps {
   onClose: () => void;
+  /** Effective layout of the active document (see editor/DocLayout.ts). */
+  docLayout: DocLayout;
+  onDocLayoutChange: (patch: Partial<DocLayout>) => void;
 }
 
 /** Three aligned inputs (left/center/right) for one line of page chrome. */
@@ -47,7 +51,7 @@ function HeaderFooterRow({
   );
 }
 
-export function SettingsModal({ onClose }: SettingsModalProps) {
+export function SettingsModal({ onClose, docLayout, onDocLayoutChange }: SettingsModalProps) {
   const { settings, updateSettings: onChange } = useSettings();
   useSyncExternalStore(citationStore.subscribe, citationStore.getVersion);
   const bibError = citationStore.getError();
@@ -117,20 +121,20 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
 
           <HeaderFooterRow
             label="Cabeçalho (impressão)"
-            value={settings.pageHeader}
-            onChange={(pageHeader) => onChange({ pageHeader })}
+            value={docLayout.pageHeader}
+            onChange={(pageHeader) => onDocLayoutChange({ pageHeader })}
           />
           <HeaderFooterRow
             label="Rodapé (impressão)"
-            value={settings.pageFooter}
-            onChange={(pageFooter) => onChange({ pageFooter })}
+            value={docLayout.pageFooter}
+            onChange={(pageFooter) => onDocLayoutChange({ pageFooter })}
           />
           <label className="ai-field hf-first-page">
             <span>
               <input
                 type="checkbox"
-                checked={settings.pageChromeOnFirst !== false}
-                onChange={(e) => onChange({ pageChromeOnFirst: e.target.checked })}
+                checked={docLayout.pageChromeOnFirst}
+                onChange={(e) => onDocLayoutChange({ pageChromeOnFirst: e.target.checked })}
               />{" "}
               Mostrar cabeçalho/rodapé na primeira página
             </span>

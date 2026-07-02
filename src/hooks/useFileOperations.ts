@@ -3,8 +3,9 @@ import type { Editor } from "@tiptap/react";
 import { baseName, openDocument, openDocumentPath, saveDocumentAs, type DocFile } from "../lib/document";
 import { pickImageDataUri } from "../lib/images";
 import type { PrintOptions } from "../lib/pdf";
-import { loadSettings } from "../lib/settings";
+import type { Settings } from "../lib/settings";
 import { tabTitle, type Tab } from "../lib/tabs";
+import { effectiveLayout, type DocLayout } from "../editor/DocLayout";
 import type { SavableTab } from "./useDocumentTabs";
 
 interface FileOperationsDeps {
@@ -13,9 +14,10 @@ interface FileOperationsDeps {
   activeIdRef: RefObject<string>;
   setTabs: Dispatch<SetStateAction<Tab[]>>;
   openDocFile: (doc: DocFile) => void;
-  queueSave: (tab: SavableTab, html: string) => Promise<void>;
+  queueSave: (tab: SavableTab, html: string, layout: DocLayout | null) => Promise<void>;
   cancelAutosave: () => void;
   remember: (path: string) => void;
+  settings: Settings;
 }
 
 /** Open/save/export operations for the active tab (dialogs included). */
@@ -28,6 +30,7 @@ export function useFileOperations({
   queueSave,
   cancelAutosave,
   remember,
+  settings,
 }: FileOperationsDeps) {
   const [printJob, setPrintJob] = useState<{ html: string; options: PrintOptions } | null>(null);
 
@@ -57,7 +60,8 @@ export function useFileOperations({
     const at = tabsRef.current.find((t) => t.id === activeIdRef.current);
     const suggested = at?.filePath ? baseName(at.filePath) : "sem-titulo.md";
     try {
-      const doc = await saveDocumentAs(editor.getHTML(), suggested);
+      const layout = effectiveLayout(editor.state.doc, settings);
+      const doc = await saveDocumentAs(editor.getHTML(), layout, suggested);
       if (doc) {
         const id = activeIdRef.current;
         setTabs((ts) => ts.map((t) => (t.id === id ? { ...t, filePath: doc.path, format: doc.format, dirty: false } : t)));
@@ -67,7 +71,7 @@ export function useFileOperations({
     } catch (e) {
       window.alert(`Não foi possível salvar:\n${e}`);
     }
-  }, [editorRef, tabsRef, activeIdRef, setTabs, remember, cancelAutosave]);
+  }, [editorRef, tabsRef, activeIdRef, setTabs, remember, cancelAutosave, settings]);
 
   const handleSave = useCallback(async () => {
     const editor = editorRef.current;
@@ -79,13 +83,14 @@ export function useFileOperations({
       return;
     }
     try {
-      await queueSave({ id: at.id, filePath: at.filePath, format: at.format }, editor.getHTML());
+      const layout = effectiveLayout(editor.state.doc, settings);
+      await queueSave({ id: at.id, filePath: at.filePath, format: at.format }, editor.getHTML(), layout);
       remember(at.filePath);
       cancelAutosave();
     } catch (e) {
       window.alert(`Não foi possível salvar:\n${e}`);
     }
-  }, [editorRef, tabsRef, activeIdRef, handleSaveAs, queueSave, remember, cancelAutosave]);
+  }, [editorRef, tabsRef, activeIdRef, handleSaveAs, queueSave, remember, cancelAutosave, settings]);
 
   const handleInsertImage = useCallback(async () => {
     const editor = editorRef.current;
@@ -94,26 +99,26 @@ export function useFileOperations({
     if (dataUri) editor.chain().focus().setImage({ src: dataUri }).run();
   }, [editorRef]);
 
-  // Snapshot the document and settings at click time; the preview modal
-  // paginates that snapshot and prints exactly what it shows.
+  // Snapshot the document at click time; the preview modal paginates that
+  // snapshot and prints exactly what it shows.
   const handleExportPdf = useCallback(() => {
     const editor = editorRef.current;
     if (!editor) return;
     const at = tabsRef.current.find((t) => t.id === activeIdRef.current);
-    const s = loadSettings();
+    const layout = effectiveLayout(editor.state.doc, settings);
     setPrintJob({
       html: editor.getHTML(),
       options: {
         title: at ? tabTitle(at) : "Documento",
-        pageFormat: s.pageFormat || "a4",
-        margins: s.pageMargins,
-        header: s.pageHeader,
-        footer: s.pageFooter,
-        chromeOnFirst: s.pageChromeOnFirst !== false,
-        numberHeadings: s.numberHeadings === true,
+        pageFormat: layout.pageFormat,
+        margins: layout.pageMargins,
+        header: layout.pageHeader,
+        footer: layout.pageFooter,
+        chromeOnFirst: layout.pageChromeOnFirst,
+        numberHeadings: layout.numberHeadings,
       },
     });
-  }, [editorRef, tabsRef, activeIdRef]);
+  }, [editorRef, tabsRef, activeIdRef, settings]);
 
   return { handleOpen, handleOpenRecent, handleSave, handleSaveAs, handleInsertImage, handleExportPdf, printJob, setPrintJob };
 }

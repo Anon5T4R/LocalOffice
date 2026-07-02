@@ -1,18 +1,17 @@
 import { useEditorState } from "@tiptap/react";
 import { useEditorInstance } from "../../state/EditorContext";
 import { useSettings } from "../../state/SettingsContext";
-import type { PageFormat, PageMargins } from "../../lib/settings";
+import type { PageFormat } from "../../lib/settings";
 import { TEMPLATES, type DocTemplate } from "../../lib/templates";
+import { effectiveLayout, patchDocLayout } from "../DocLayout";
 import { Btn } from "./Btn";
 import { MARGIN_PRESETS, currentMarginPreset } from "./shared";
 
 /** "Layout": modelos, formato de página, margens, espaçamentos, numeração. */
 export function LayoutTab({ onApplyTemplate }: { onApplyTemplate: (tmpl: DocTemplate) => void }) {
   const editor = useEditorInstance();
-  const { settings, updateSettings } = useSettings();
-  const pageFormat = settings.pageFormat || "classic";
-  const pageMargins: PageMargins = settings.pageMargins || MARGIN_PRESETS.normal;
-  const numberHeadings = settings.numberHeadings === true;
+  const { settings } = useSettings();
+  const { pageFormat, pageMargins, numberHeadings } = effectiveLayout(editor.state.doc, settings);
 
   const s = useEditorState({
     editor,
@@ -55,7 +54,7 @@ export function LayoutTab({ onApplyTemplate }: { onApplyTemplate: (tmpl: DocTemp
         <select
           className="tb-btn tb-select"
           value={pageFormat}
-          onChange={(e) => updateSettings({ pageFormat: e.target.value as PageFormat })}
+          onChange={(e) => patchDocLayout(editor, settings, { pageFormat: e.target.value as PageFormat })}
           title="Formato de página"
         >
           <option value="classic">Clássica (infinito)</option>
@@ -73,7 +72,7 @@ export function LayoutTab({ onApplyTemplate }: { onApplyTemplate: (tmpl: DocTemp
           value={currentMarginPreset(pageMargins)}
           onChange={(e) => {
             const preset = MARGIN_PRESETS[e.target.value];
-            if (preset) updateSettings({ pageMargins: preset });
+            if (preset) patchDocLayout(editor, settings, { pageMargins: preset });
           }}
           title="Margens da página"
         >
@@ -146,7 +145,7 @@ export function LayoutTab({ onApplyTemplate }: { onApplyTemplate: (tmpl: DocTemp
 
       <div className="tb-group">
         <Btn
-          onClick={() => updateSettings({ numberHeadings: !numberHeadings })}
+          onClick={() => patchDocLayout(editor, settings, { numberHeadings: !numberHeadings })}
           active={numberHeadings}
           title="Numerar títulos automaticamente (1, 1.1, 1.1.1…)"
           wide

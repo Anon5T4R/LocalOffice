@@ -1,5 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import type { Mark } from "@tiptap/pm/model";
 import type { DocTemplate } from "../../lib/templates";
+import { useEditorInstance } from "../../state/EditorContext";
 import { HomeTab } from "./HomeTab";
 import { InsertTab } from "./InsertTab";
 import { LayoutTab } from "./LayoutTab";
@@ -12,9 +14,36 @@ interface RibbonProps {
 /**
  * Toolbar with one component per tab. Only the active tab is mounted, so only
  * its (small) useEditorState selector subscribes to editor transactions.
+ *
+ * The format painter's state lives here (not in HomeTab) so it survives
+ * switching to another ribbon tab after arming it — HomeTab unmounting would
+ * otherwise silently disarm it.
  */
 export function Ribbon({ onInsertImage, onApplyTemplate }: RibbonProps) {
   const [tab, setTab] = useState<"inicio" | "inserir" | "layout">("inicio");
+  const editor = useEditorInstance();
+  const [painterMarks, setPainterMarks] = useState<readonly Mark[] | null>(null);
+
+  // After capturing marks, the next non-empty selection gets them.
+  useEffect(() => {
+    if (!painterMarks) return;
+    const apply = () => {
+      const sel = editor.state.selection;
+      if (sel.empty) return;
+      const chain = editor.chain().focus().unsetAllMarks();
+      painterMarks.forEach((m) => chain.setMark(m.type.name, m.attrs));
+      chain.run();
+      setPainterMarks(null);
+    };
+    editor.on("selectionUpdate", apply);
+    return () => { editor.off("selectionUpdate", apply); };
+  }, [editor, painterMarks]);
+
+  const copyFormat = () => {
+    const sel = editor.state.selection;
+    const marks = sel.empty ? sel.$from.marks() : sel.$from.marksAcross(sel.$to) ?? sel.$from.marks();
+    setPainterMarks(marks);
+  };
 
   return (
     <div className="ribbon">
@@ -30,7 +59,7 @@ export function Ribbon({ onInsertImage, onApplyTemplate }: RibbonProps) {
         </button>
       </div>
 
-      {tab === "inicio" && <HomeTab />}
+      {tab === "inicio" && <HomeTab painterActive={!!painterMarks} onCopyFormat={copyFormat} />}
       {tab === "inserir" && <InsertTab onInsertImage={onInsertImage} />}
       {tab === "layout" && <LayoutTab onApplyTemplate={onApplyTemplate} />}
     </div>

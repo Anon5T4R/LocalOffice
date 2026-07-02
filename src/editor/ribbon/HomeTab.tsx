@@ -1,37 +1,20 @@
-import { useEffect, useState } from "react";
-import type { Mark } from "@tiptap/pm/model";
+import { useMemo } from "react";
 import { useEditorState } from "@tiptap/react";
 import { useEditorInstance } from "../../state/EditorContext";
 import { useSettings } from "../../state/SettingsContext";
 import { Btn } from "./Btn";
 import { CASE_FNS, buildFontList, transformCase } from "./shared";
 
+interface HomeTabProps {
+  /** Format painter armed state — owned by Ribbon so it survives tab switches. */
+  painterActive: boolean;
+  onCopyFormat: () => void;
+}
+
 /** "Início": undo/redo, blocos, fonte, marcas, cores, alinhamento, listas, caixa. */
-export function HomeTab() {
+export function HomeTab({ painterActive, onCopyFormat }: HomeTabProps) {
   const editor = useEditorInstance();
   const { settings, systemFonts, importFont } = useSettings();
-  const [painterMarks, setPainterMarks] = useState<readonly Mark[] | null>(null);
-
-  // Format painter: after capturing marks, the next non-empty selection gets them.
-  useEffect(() => {
-    if (!painterMarks) return;
-    const apply = () => {
-      const sel = editor.state.selection;
-      if (sel.empty) return;
-      const chain = editor.chain().focus().unsetAllMarks();
-      painterMarks.forEach((m) => chain.setMark(m.type.name, m.attrs));
-      chain.run();
-      setPainterMarks(null);
-    };
-    editor.on("selectionUpdate", apply);
-    return () => { editor.off("selectionUpdate", apply); };
-  }, [editor, painterMarks]);
-
-  const copyFormat = () => {
-    const sel = editor.state.selection;
-    const marks = sel.empty ? sel.$from.marks() : sel.$from.marksAcross(sel.$to) ?? sel.$from.marks();
-    setPainterMarks(marks);
-  };
 
   const s = useEditorState({
     editor,
@@ -65,7 +48,13 @@ export function HomeTab() {
   });
 
   const chain = () => editor.chain().focus();
-  const allFonts = buildFontList(settings.customFonts || [], systemFonts);
+  // Only recomputed when the font sets actually change — this list can run
+  // into the hundreds with a full system font catalog, and HomeTab
+  // re-renders on every selection/formatting change.
+  const allFonts = useMemo(
+    () => buildFontList(settings.customFonts || [], systemFonts),
+    [settings.customFonts, systemFonts]
+  );
 
   return (
     <div className="ribbon-body">
@@ -207,7 +196,7 @@ export function HomeTab() {
           <option value="lower">minúsculas</option>
           <option value="title">Iniciais Maiúsculas</option>
         </select>
-        <Btn onClick={copyFormat} active={!!painterMarks} title="Pincel de formatação (copie o formato e selecione o destino)">🖌</Btn>
+        <Btn onClick={onCopyFormat} active={painterActive} title="Pincel de formatação (copie o formato e selecione o destino)">🖌</Btn>
         <Btn onClick={() => chain().unsetAllMarks().clearNodes().run()} title="Limpar formatação">⌫ Limpar</Btn>
       </div>
     </div>
