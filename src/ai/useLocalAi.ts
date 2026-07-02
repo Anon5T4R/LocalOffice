@@ -102,6 +102,10 @@ export function useLocalAi(
   }, []);
 
   const scan = useCallback(async () => {
+    if (!dir.trim()) {
+      setStatusMsg("Configure a pasta de modelos (.gguf) em ⚙ Configurações.");
+      return;
+    }
     try {
       const found = await listModels(dir);
       setModels(found);
@@ -113,7 +117,9 @@ export function useLocalAi(
   }, [dir, modelPath]);
 
   useEffect(() => {
-    scan();
+    // Never scanned a guessed path on boot: with no folder configured there
+    // is nothing to do (and no error to show until the user opens the panel).
+    if (settings.modelsDir.trim()) scan();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
