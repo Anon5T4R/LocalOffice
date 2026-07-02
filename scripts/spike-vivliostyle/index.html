@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <title>Spike: paged.js vs Vivliostyle</title>
+  <style>
+    body { margin: 0; font-family: system-ui, sans-serif; background: #444; }
+    header { position: sticky; top: 0; z-index: 10; background: #222; color: #eee; padding: 8px 16px; display: flex; gap: 24px; align-items: baseline; }
+    header .stat { font-size: 13px; opacity: 0.9; }
+    main { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 8px; }
+    .pane { background: #666; overflow: auto; height: calc(100vh - 60px); }
+    .pane h3 { color: #fff; margin: 8px; font-size: 14px; position: sticky; top: 0; }
+    /* paged.js pages */
+    .pagedjs_page { background: #fff; margin: 8px auto; box-shadow: 0 1px 4px rgba(0,0,0,.5); }
+    /* vivliostyle pages get inline sizes; give them the same backdrop */
+    #viv-viewport [data-vivliostyle-page-container] { background: #fff; margin: 8px auto !important; box-shadow: 0 1px 4px rgba(0,0,0,.5); }
+  </style>
+</head>
+<body>
+  <header>
+    <strong>Spike: paged.js × Vivliostyle</strong>
+    <span class="stat" id="paged-stat">paged.js: …</span>
+    <span class="stat" id="viv-stat">vivliostyle: …</span>
+  </header>
+  <main>
+    <div class="pane"><h3>paged.js 0.4.3 (MIT)</h3><div id="paged-out"></div></div>
+    <div class="pane"><h3>Vivliostyle 2.x (AGPL-3.0)</h3><div id="viv-viewport"></div></div>
+  </main>
+  <script type="module" src="./main.js"></script>
+</body>
+</html>
