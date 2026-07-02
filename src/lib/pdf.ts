@@ -257,6 +257,7 @@ function buildPrintCss(opts: PrintOptions): string {
       font-size: 12pt;
       line-height: 1.5;
       color: #000;
+      overflow-wrap: anywhere;
     }
     .print-content img { max-width: 100%; }
     .print-content table { border-collapse: collapse; width: 100%; }

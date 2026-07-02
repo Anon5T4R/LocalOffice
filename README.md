@@ -78,6 +78,6 @@ Todo o software é **open-source**. Sinta-se à vontade para usar, adaptar e con
 
 ## 📄 Licença
 
-Código sob licença **MIT** (veja [LICENSE](LICENSE)).
+Código sob licença **GNU AGPL-3.0** (veja [LICENSE](LICENSE)) — copyleft forte: se você rodar uma versão modificada como serviço de rede, é obrigado a disponibilizar o código-fonte dela aos usuários. Relicenciado a partir da MIT em 2026 para permitir a incorporação de componentes AGPL (ex.: conversor `x2t` do OnlyOffice).
 
 Os binários de terceiros embarcados no instalador mantêm suas próprias licenças: [pandoc](https://github.com/jgm/pandoc) (GPL-2.0+) e [llama.cpp](https://github.com/ggml-org/llama.cpp) (MIT), distribuídos sem modificação.
