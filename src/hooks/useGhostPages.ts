@@ -9,6 +9,8 @@ import type { PageFormat, PageMargins } from "../lib/settings";
  * (mid-paragraph, like any word processor). Offsets are Y positions in the
  * editor's (zoomed) coordinate space where each new page begins.
  */
+const PAGE_BREAK_EPSILON = 0.5;
+
 export function measurePageOffsets(el: HTMLElement, pageH: number): number[] {
   const rect = el.getBoundingClientRect();
   const offsets: number[] = [];
@@ -23,20 +25,19 @@ export function measurePageOffsets(el: HTMLElement, pageH: number): number[] {
       pageStart = bottom;
       continue;
     }
-    if (bottom - pageStart <= pageH) continue;
+    if (bottom - pageStart <= pageH + PAGE_BREAK_EPSILON) continue;
 
-    // Snap the boundary to the block's start when it fits on the next page.
-    if (top > pageStart && bottom - top <= pageH) {
+    if (top > pageStart && bottom - top <= pageH + PAGE_BREAK_EPSILON) {
       offsets.push(top);
       pageStart = top;
       continue;
     }
-    // Oversized block: slice it at page height.
+
     if (top > pageStart) {
       offsets.push(top);
       pageStart = top;
     }
-    while (bottom - pageStart > pageH) {
+    while (bottom - pageStart > pageH + PAGE_BREAK_EPSILON) {
       pageStart += pageH;
       offsets.push(pageStart);
     }
@@ -89,7 +90,9 @@ export function useGhostPages(
       // page frames (which the container's CSS zoom scales uniformly).
       const offsets = measurePageOffsets(el, printableH * zoomFactor).map((o) => o / zoomFactor);
       const docH = el.getBoundingClientRect().height / zoomFactor;
-      const pages = offsets.map((top, i) => ({ top, height: (offsets[i + 1] ?? docH) - top }));
+      const pages = offsets
+        .map((top, i) => ({ top, height: (offsets[i + 1] ?? docH) - top }))
+        .filter((p) => p.height > 2);
       setGhostPages(pages);
       setGhostHtml(editor.getHTML());
     };
