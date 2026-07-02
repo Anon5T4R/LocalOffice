@@ -1355,19 +1355,43 @@ body {
   border-top-color: var(--accent);
 }
 
-/* Real (automatic) page breaks -- src/editor/PageBreaks.ts. The gap reveals
-   the app's backdrop color, breaking the illusion of one continuous sheet;
-   the inset shadows on each edge suggest where one page ends and the next
-   begins. */
+/* Real (automatic) page breaks + per-page chrome -- src/editor/PageBreaks.ts.
+   A break is three stacked bands: the ending page's bottom margin (white,
+   holding its footer), a bg-colored inter-sheet gap, then the next page's top
+   margin (white, holding its header). Leading/trailing variants render a
+   single margin band (page 1's top margin, the last page's bottom margin) —
+   these provide the vertical page margins that `.page` no longer pads in
+   paginated mode. */
 .ProseMirror .page-gap {
+  user-select: none;
+  pointer-events: none;
+}
+
+/* White margin band: same fill as the sheet, so it reads as part of the page,
+   not as a gap. */
+.ProseMirror .page-margin {
+  background: var(--panel);
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  padding: 6px 2px;
+}
+.ProseMirror .page-margin-top {
+  justify-content: flex-start;
+}
+.ProseMirror .page-margin-bottom {
+  justify-content: flex-end;
+}
+
+/* The bg-colored strip between two sheets; inset shadows suggest the paper
+   edges above and below. */
+.ProseMirror .page-sheet-gap {
   position: relative;
   margin: 0 -2px;
   background: var(--bg);
   box-shadow:
     inset 0 6px 6px -6px rgba(0, 0, 0, 0.18),
     inset 0 -6px 6px -6px rgba(0, 0, 0, 0.18);
-  user-select: none;
-  pointer-events: none;
 }
 
 .ProseMirror .page-gap-label {
@@ -1378,6 +1402,27 @@ body {
   font-size: 11px;
   color: var(--muted);
   white-space: nowrap;
+}
+
+/* Header/footer preview: real content the export will print, shown
+   non-editable (edited via the Layout ribbon). Muted enough to read as
+   chrome, not body text. */
+.ProseMirror .page-chrome {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.72em;
+  line-height: 1.3;
+  color: var(--muted);
+}
+.ProseMirror .page-chrome-slot {
+  white-space: pre-wrap;
+}
+.ProseMirror .page-chrome-slot:nth-child(2) {
+  text-align: center;
+}
+.ProseMirror .page-chrome-slot:nth-child(3) {
+  text-align: right;
 }
 
 /* Task lists */
