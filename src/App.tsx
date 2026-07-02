@@ -27,6 +27,7 @@ import { useFileOperations } from "./hooks/useFileOperations";
 import { useZoom } from "./hooks/useZoom";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 import { useCitationRegistry } from "./hooks/useCitationRegistry";
+import { useGhostPages } from "./hooks/useGhostPages";
 import {
   Recent,
   Settings,
@@ -47,48 +48,6 @@ const PAGE_DIMS: Record<string, { width: string; height: string; pxHeight: numbe
   letter: { width: "215.9mm", height: "279.4mm", pxHeight: 1056 },
   a3: { width: "297mm", height: "420mm", pxHeight: 1587 },
 };
-
-/**
- * Page boundaries measured from the real block layout: a new page starts at
- * the first block that doesn't fit the current one, or right after a manual
- * page break. Blocks taller than a whole page are sliced at page height
- * (mid-paragraph, like any word processor). Offsets are Y positions in the
- * editor's (zoomed) coordinate space where each new page begins.
- */
-function measurePageOffsets(el: HTMLElement, pageH: number): number[] {
-  const rect = el.getBoundingClientRect();
-  const offsets: number[] = [];
-  let pageStart = 0;
-  for (const child of Array.from(el.children) as HTMLElement[]) {
-    const r = child.getBoundingClientRect();
-    const top = r.top - rect.top;
-    const bottom = r.bottom - rect.top;
-
-    if (child.hasAttribute("data-page-break")) {
-      offsets.push(bottom);
-      pageStart = bottom;
-      continue;
-    }
-    if (bottom - pageStart <= pageH) continue;
-
-    // Snap the boundary to the block's start when it fits on the next page.
-    if (top > pageStart && bottom - top <= pageH) {
-      offsets.push(top);
-      pageStart = top;
-      continue;
-    }
-    // Oversized block: slice it at page height.
-    if (top > pageStart) {
-      offsets.push(top);
-      pageStart = top;
-    }
-    while (bottom - pageStart > pageH) {
-      pageStart += pageH;
-      offsets.push(pageStart);
-    }
-  }
-  return offsets;
-}
 
 function App() {
   const editorRef = useRef<Editor | null>(null);
@@ -168,11 +127,6 @@ function App() {
   const [showSearch, setShowSearch] = useState(false);
   const [showVersionHistory, setShowVersionHistory] = useState(false);
   const [systemFonts, setSystemFonts] = useState<string[]>([]);
-  // Each ghost mirrors one printed page: `top` is the content offset where the
-  // page starts, `height` the slice it shows (so the next page's first block
-  // never peeks at the bottom). Both are in unzoomed content px.
-  const [ghostPages, setGhostPages] = useState<{ top: number; height: number }[]>([]);
-  const [ghostHtml, setGhostHtml] = useState("");
 
   const pageFormat = settings.pageFormat || "classic";
   const pageMargins = settings.pageMargins || { top: 56, bottom: 56, left: 72, right: 72 };
@@ -231,45 +185,13 @@ function App() {
   });
   editorRef.current = editor;
 
-  // Ghost pages: measure page boundaries (manual breaks + overflow) and mirror
-  // the content into fixed-size ghost pages. Runs on mount/format change and on
-  // content resize, coalesced via rAF — ResizeObserver fires in bursts while
-  // typing and editor.getHTML() serializes the whole doc, so once per frame max.
-  useEffect(() => {
-    if (!editor || !isPaginated) {
-      setGhostPages([]);
-      setGhostHtml("");
-      return;
-    }
-    const el = editor.view.dom;
-    let raf = 0;
-    const measure = () => {
-      raf = 0;
-      // A page only fits its *printable* height — the page minus its margins,
-      // not the whole sheet. Measuring against the full sheet is what dropped
-      // a margin's worth of content at every page seam.
-      const printableH = dims.pxHeight - pageMargins.top - pageMargins.bottom;
-      // measurePageOffsets works in the zoomed coordinate space of
-      // getBoundingClientRect, so scale the target up; then normalize the
-      // results back to unzoomed px so the ghost transforms match the mm-sized
-      // page frames (which the container's CSS zoom scales uniformly).
-      const offsets = measurePageOffsets(el, printableH * zoomFactor).map((o) => o / zoomFactor);
-      const docH = el.getBoundingClientRect().height / zoomFactor;
-      const pages = offsets.map((top, i) => ({ top, height: (offsets[i + 1] ?? docH) - top }));
-      setGhostPages(pages);
-      setGhostHtml(editor.getHTML());
-    };
-    const schedule = () => {
-      if (!raf) raf = requestAnimationFrame(measure);
-    };
-    schedule();
-    const ro = new ResizeObserver(schedule);
-    ro.observe(el);
-    return () => {
-      ro.disconnect();
-      if (raf) cancelAnimationFrame(raf);
-    };
-  }, [editor, pageFormat, dims.pxHeight, isPaginated, zoomFactor, pageMargins.top, pageMargins.bottom]);
+  const { ghostPages, ghostHtml } = useGhostPages(editor, {
+    isPaginated,
+    pageFormat,
+    pageHeightPx: dims.pxHeight,
+    pageMargins,
+    zoomFactor,
+  });
 
   // Spellcheck: drive the WebView's native checker via DOM attributes so it stays
   // reactive to settings (WebView2 uses system dictionaries; WebKitGTK uses hunspell).
