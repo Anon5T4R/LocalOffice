@@ -112,6 +112,30 @@ marked.use({
   },
 });
 
+// Raw OOXML markers from docxFields.bakeNativeFieldsForDocx -> pandoc
+// `<xml>`{=openxml} raw_attribute syntax. Inline runs only (never a full
+// <w:p>: pandoc wraps raw blocks in their own paragraph, so a raw block
+// that is itself a <w:p> produces invalid nested paragraphs). Requires the
+// caller to export via pandoc's markdown reader with +raw_attribute, or
+// this syntax round-trips back out as literal text.
+function ooxmlRawReplacement(el: HTMLElement): string {
+  const xml = el.getAttribute("data-ooxml") ?? "";
+  if (!xml) return "";
+  // Cached field text (heading/caption labels) can contain backticks; fence
+  // with one more backtick than the longest run inside, same rule Markdown
+  // code spans use, so the raw block never terminates early.
+  const longestRun = Math.max(0, ...(xml.match(/`+/g) ?? []).map((r) => r.length));
+  const fence = "`".repeat(longestRun + 1);
+  // Trailing literal text (docxFields' " — " caption separator) rides along
+  // in the SAME replacement string rather than a sibling text node: turndown
+  // drops the leading whitespace of any text node that immediately follows a
+  // blank-replaced inline element (pre-existing behavior — affects the plain
+  // data-crossref passthrough too), so a separate " — " node would lose its
+  // space here.
+  const suffix = el.getAttribute("data-suffix") ?? "";
+  return `${fence}${xml}${fence}{=openxml}${suffix}`;
+}
+
 const turndown = new TurndownService({
   headingStyle: "atx",
   codeBlockStyle: "fenced",
@@ -135,6 +159,9 @@ const turndown = new TurndownService({
     }
     if (el.nodeName === "SPAN" && el.hasAttribute?.("data-crossref")) {
       return `<span data-crossref="${el.getAttribute("data-crossref")}"></span>`;
+    }
+    if (el.nodeName === "SPAN" && el.hasAttribute?.("data-ooxml")) {
+      return ooxmlRawReplacement(el);
     }
     if (el.nodeName === "DIV" && el.hasAttribute?.("data-bibliography")) {
       return '\n\n<div data-bibliography=""></div>\n\n';
@@ -200,6 +227,16 @@ turndown.addRule("mathInline", {
     const latex = (el.getAttribute("data-latex") ?? el.textContent ?? "").trim();
     return latex ? `$${latex}$` : "";
   },
+});
+
+// Raw OOXML markers from docxFields.bakeNativeFieldsForDocx — inline runs
+// (never a full <w:p>: pandoc wraps raw blocks in their own paragraph, so a
+// raw block that is itself a <w:p> produces invalid nested paragraphs).
+// Requires the caller to export via pandoc's markdown reader with
+// +raw_attribute, or this syntax round-trips back out as literal text.
+turndown.addRule("ooxmlRaw", {
+  filter: (node) => node.nodeName === "SPAN" && node.hasAttribute("data-ooxml"),
+  replacement: (_content, node) => ooxmlRawReplacement(node as HTMLElement),
 });
 
 // Review data has no Markdown form — degrade gracefully: comments and pending

@@ -4,6 +4,7 @@ import { markdownToHtml, htmlToMarkdown, mathFromPandoc, stripFootnoteBackrefs }
 import { bakeCitationsHtml } from "./citationStore";
 import { bakeHeadingNumbers, detectManualNumberingSequence, stripBakedHeadingNumbers } from "./bakedHeadingNumbers";
 import { bakeCaptionNumbers } from "./captionNumbers";
+import { bakeNativeFieldsForDocx } from "./docxFields";
 import { bakeReviewForDocx, reviewFromPandoc } from "./reviewExport";
 import { loadSettings } from "./settings";
 import { settingsLayout, type DocLayout } from "../editor/DocLayout";
@@ -138,7 +139,13 @@ export async function saveDocumentTo(
   }
   // Caption numbers are also decorations; bake them the same way. Markdown
   // stays clean here too — the editor regenerates the numbers from the doc.
-  if (format !== "markdown") {
+  // DOCX gets native SEQ/REF fields instead (below, bakeNativeFieldsForDocx)
+  // so Word recalculates them itself; ODT/RTF keep the plain-text bake below
+  // — {=openxml} raw blocks are docx-specific, ODF fields are a different,
+  // unvalidated mechanism (text:sequence/text:reference-mark) left for a
+  // future PR.
+  const useNativeFields = format === "docx";
+  if (format !== "markdown" && !useNativeFields) {
     html = bakeCaptionNumbers(html);
   }
   if (PANDOC_FORMATS.has(format)) {
@@ -146,12 +153,15 @@ export async function saveDocumentTo(
     // (a Word user without Zotero still reads the document correctly).
     // Comments and tracked changes become native Word review data.
     const baked = bakeReviewForDocx(bakeCitationsHtml(html));
+    const hasCaptionsOrRefs = baked.includes("data-caption") || baked.includes("data-crossref");
     // pandoc's HTML reader can't turn our footnote markup into native notes,
-    // nor our math spans into equations — for docs with either we go through
-    // Markdown ([^n] / $latex$), which pandoc maps to real Word/ODT footnotes
-    // and native OMML equations. Plain docs stay on the higher-fidelity HTML path.
-    if (hasFootnotes(baked) || hasMath(baked)) {
-      await invoke("export_via_pandoc", { path, content: htmlToMarkdown(baked), from: "markdown", to: format });
+    // math spans into equations, or (docx only) captions/crossrefs into
+    // native Word fields — for docs with any of those we go through Markdown
+    // ([^n] / $latex$ / raw OOXML), which pandoc maps to real Word/ODT
+    // constructs. Plain docs stay on the higher-fidelity HTML path.
+    if (hasFootnotes(baked) || hasMath(baked) || (useNativeFields && hasCaptionsOrRefs)) {
+      const forExport = useNativeFields ? bakeNativeFieldsForDocx(baked) : baked;
+      await invoke("export_via_pandoc", { path, content: htmlToMarkdown(forExport), from: "markdown", to: format });
     } else {
       await invoke("export_via_pandoc", { path, content: baked, from: "html", to: format });
     }

@@ -78,9 +78,15 @@ pub(crate) async fn export_via_pandoc(
         .map_err(|e| format!("falha ao gravar temp: {}", e))?;
     let tmp_str = tmp.to_string_lossy().to_string();
 
+    // +raw_attribute lets markdown carry inline `<xml>`{=openxml} spans that
+    // pandoc's docx writer passes through byte-for-byte (docxFields.ts uses
+    // this for native SEQ/REF fields). No effect on documents that don't use
+    // the syntax, so always-on for the markdown reader is safe.
+    let from_arg = if from == "markdown" { "markdown+raw_attribute" } else { from.as_str() };
+
     let result = run_pandoc(
         &app,
-        &[tmp_str.as_str(), "-f", from.as_str(), "-t", to.as_str(), "-o", path.as_str()],
+        &[tmp_str.as_str(), "-f", from_arg, "-t", to.as_str(), "-o", path.as_str()],
         "export",
     )
     .await;
