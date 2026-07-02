@@ -2,7 +2,9 @@ import { invoke } from "@tauri-apps/api/core";
 import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { markdownToHtml, htmlToMarkdown, stripFootnoteBackrefs } from "./markdown";
 import { bakeCitationsHtml } from "./citationStore";
+import { bakeHeadingNumbers, stripBakedHeadingNumbers } from "./bakedHeadingNumbers";
 import { bakeReviewForDocx, reviewFromPandoc } from "./reviewExport";
+import { loadSettings } from "./settings";
 
 /** Whether the editor HTML carries footnotes (drives the DOCX/ODT export path). */
 function hasFootnotes(html: string): boolean {
@@ -38,16 +40,29 @@ export function baseName(path: string): string {
 
 /** Load a file's contents into editor HTML. */
 async function readToHtml(path: string, format: DocFormat): Promise<string> {
+  // Heading numbers baked into the file by an export must come back out, or
+  // the editor's decorations double them. Unmarked text prefixes (DOCX loses
+  // the marker span) are only stripped while automatic numbering is on — with
+  // it off there is nothing to double, so the text is left alone.
+  const stripUnmarked = loadSettings().numberHeadings === true;
   if (PANDOC_FORMATS.has(format)) {
     const html = await invoke<string>("import_via_pandoc", { path, from: format });
-    return reviewFromPandoc(stripFootnoteBackrefs(html));
+    return stripBakedHeadingNumbers(reviewFromPandoc(stripFootnoteBackrefs(html)), stripUnmarked);
   }
   const raw = await invoke<string>("read_text_file", { path });
-  return format === "markdown" ? await markdownToHtml(raw) : raw;
+  const html = format === "markdown" ? await markdownToHtml(raw) : raw;
+  return stripBakedHeadingNumbers(html, stripUnmarked);
 }
 
 /** Write editor HTML to disk in the given format. */
 export async function saveDocumentTo(path: string, html: string, format: DocFormat): Promise<void> {
+  // Automatic heading numbers are editor decorations and don't serialize —
+  // bake them in (marked, so reopening strips them) or a Word/browser reader
+  // sees unnumbered headings. Markdown stays clean: it's source form, and the
+  // editor regenerates the numbers from it.
+  if (format !== "markdown" && loadSettings().numberHeadings === true) {
+    html = bakeHeadingNumbers(html);
+  }
   if (PANDOC_FORMATS.has(format)) {
     // Word/ODT are one-way outputs for citations: bake them as formatted text
     // (a Word user without Zotero still reads the document correctly).

@@ -95,7 +95,14 @@ export function preparePrintHtml(html: string, opts: Pick<PrintOptions, "numberH
     const label = advanceHeadingCounter(counters, level);
     const text = h.textContent ?? "";
     if (!h.id) h.id = `toc-h-${i}`;
-    if (opts.numberHeadings) h.prepend(doc.createTextNode(`${label} `));
+    if (opts.numberHeadings) {
+      // Marked span (not a bare text node) so reimport paths can strip the
+      // baked number deterministically — see lib/bakedHeadingNumbers.ts.
+      const num = doc.createElement("span");
+      num.setAttribute("data-baked-heading-num", "");
+      num.textContent = `${label} `;
+      h.prepend(num);
+    }
     entries.push({ level, text: opts.numberHeadings ? `${label} ${text}` : text, id: h.id });
   });
 
