@@ -13,6 +13,8 @@ export interface CaptionEntry {
   text: string;
   /** Anchor id assigned to the caption element. */
   id: string;
+  /** Persistent cross-reference id (data-ref-id), when the caption has one. */
+  refId: string | null;
 }
 
 export function captionKindOf(value: string | null): CaptionKind {
@@ -37,7 +39,7 @@ export function bakeCaptionsInto(doc: Document): CaptionEntry[] {
     span.setAttribute("data-baked-caption-num", "");
     span.textContent = `${label} — `;
     p.prepend(span);
-    entries.push({ kind, label, text, id: p.id });
+    entries.push({ kind, label, text, id: p.id, refId: p.getAttribute("data-ref-id") });
   });
   return entries;
 }

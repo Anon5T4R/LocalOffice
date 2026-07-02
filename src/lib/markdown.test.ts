@@ -84,6 +84,27 @@ describe("htmlToMarkdown", () => {
     expect(back).toContain('<nav data-toc="figures"></nav>');
   });
 
+  it("faz roundtrip de refId de título via {#id} e de span de referência", async () => {
+    const html =
+      '<h2 data-ref-id="ref-abc">Métodos</h2><p>ver <span data-crossref="ref-abc"></span> adiante</p>';
+    const md = htmlToMarkdown(html);
+    expect(md).toContain("## Métodos {#ref-abc}");
+    expect(md).toContain('<span data-crossref="ref-abc"></span>');
+    const back = await markdownToHtml(md);
+    expect(back).toContain('data-ref-id="ref-abc"');
+    expect(back).not.toContain("{#ref-abc}");
+    expect(back).toContain('data-crossref="ref-abc"');
+  });
+
+  it("título sem refId não ganha sufixo {#}", () => {
+    expect(htmlToMarkdown("<h1>Simples</h1>")).toBe("# Simples\n");
+  });
+
+  it("legenda preserva data-ref-id no roundtrip", () => {
+    const html = '<p data-caption="table" data-ref-id="ref-t1">medições</p>';
+    expect(htmlToMarkdown(html)).toContain('<p data-caption="table" data-ref-id="ref-t1">medições</p>');
+  });
+
   it("faz roundtrip de equação inline", async () => {
     const md = "a fórmula $E=mc^2$ muda tudo\n";
     const html = await markdownToHtml(md);

@@ -97,6 +97,21 @@ marked.use({
   ],
 });
 
+// Pandoc header-attribute syntax ("## Título {#ref-abc}") carries the
+// cross-reference id of a heading through Markdown; written by the
+// headingWithRefId turndown rule below.
+marked.use({
+  renderer: {
+    heading({ tokens, depth, text }) {
+      const m = /\s*\{#([\w-]+)\}\s*$/.exec(text);
+      let inner = this.parser.parseInline(tokens);
+      if (!m) return `<h${depth}>${inner}</h${depth}>\n`;
+      inner = inner.replace(/\s*\{#[\w-]+\}\s*$/, "");
+      return `<h${depth} data-ref-id="${m[1]}">${inner}</h${depth}>\n`;
+    },
+  },
+});
+
 const turndown = new TurndownService({
   headingStyle: "atx",
   codeBlockStyle: "fenced",
@@ -116,7 +131,10 @@ const turndown = new TurndownService({
       return `\n\n<nav data-toc="${el.getAttribute("data-toc") ?? ""}"></nav>\n\n`;
     }
     if (el.nodeName === "P" && el.hasAttribute?.("data-caption")) {
-      return `\n\n<p data-caption="${el.getAttribute("data-caption")}"></p>\n\n`;
+      return `\n\n${captionOpenTag(el)}</p>\n\n`;
+    }
+    if (el.nodeName === "SPAN" && el.hasAttribute?.("data-crossref")) {
+      return `<span data-crossref="${el.getAttribute("data-crossref")}"></span>`;
     }
     if (el.nodeName === "DIV" && el.hasAttribute?.("data-bibliography")) {
       return '\n\n<div data-bibliography=""></div>\n\n';
@@ -132,14 +150,43 @@ turndown.use(gfm);
 // round-trip survives (pandoc also reads <sub>/<sup> into DOCX/ODT natively).
 turndown.keep(["sub", "sup"]);
 
+/** Opening tag for a caption block, preserving kind and cross-ref id. */
+function captionOpenTag(el: HTMLElement): string {
+  const kind = el.getAttribute("data-caption") === "table" ? "table" : "figure";
+  const refId = el.getAttribute("data-ref-id");
+  return `<p data-caption="${kind}"${refId ? ` data-ref-id="${refId}"` : ""}>`;
+}
+
 // Captions have no Markdown form — keep them as raw HTML blocks (marked hands
 // block-level raw HTML back untouched, so the round-trip is lossless).
 turndown.addRule("captionBlock", {
   filter: (node) => node.nodeName === "P" && node.hasAttribute("data-caption"),
   replacement: (_content, node) => {
     const el = node as HTMLElement;
-    const kind = el.getAttribute("data-caption") === "table" ? "table" : "figure";
-    return `\n\n<p data-caption="${kind}">${el.innerHTML}</p>\n\n`;
+    return `\n\n${captionOpenTag(el)}${el.innerHTML}</p>\n\n`;
+  },
+});
+
+// Cross-references are empty inline spans; non-empty ones (never produced by
+// the editor, but harmless) go through this rule, empty ones through the
+// blankReplacement hook above.
+turndown.addRule("crossrefSpan", {
+  filter: (node) => node.nodeName === "SPAN" && node.hasAttribute("data-crossref"),
+  replacement: (_content, node) =>
+    `<span data-crossref="${(node as HTMLElement).getAttribute("data-crossref")}"></span>`,
+});
+
+// Headings that are cross-reference targets carry their id in pandoc's header
+// attribute syntax ("## Título {#ref-abc}"), read back by the heading
+// renderer below. Headings without a refId stay plain.
+turndown.addRule("headingWithRefId", {
+  filter: ["h1", "h2", "h3", "h4", "h5", "h6"],
+  replacement: (content, node) => {
+    const el = node as HTMLElement;
+    const level = Number(el.nodeName[1]);
+    const refId = el.getAttribute("data-ref-id");
+    const suffix = refId ? ` {#${refId}}` : "";
+    return `\n\n${"#".repeat(level)} ${content}${suffix}\n\n`;
   },
 });
 

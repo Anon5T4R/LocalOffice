@@ -65,7 +65,8 @@ export async function preparePrintHtml(
     html.includes("data-citation") ||
     html.includes("data-bibliography") ||
     html.includes("data-math") ||
-    html.includes("data-caption");
+    html.includes("data-caption") ||
+    html.includes("data-crossref");
   if (!needsWork) return html;
 
   const doc = new DOMParser().parseFromString(html, "text/html");
@@ -102,6 +103,13 @@ export async function preparePrintHtml(
   // and collect the entries for the figure/table lists below.
   const captionEntries = bakeCaptionsInto(doc);
 
+  // Cross-reference targets: refId → anchor + resolved label. Captions here,
+  // headings during the walk below (their label needs the running counter).
+  const refMap = new Map<string, { id: string; label: string }>();
+  for (const c of captionEntries) {
+    if (c.refId) refMap.set(c.refId, { id: c.id, label: c.label });
+  }
+
   // Headings: collect entries, assign anchor ids, optionally bake numbers.
   // Must mirror the editor's decoration logic (same counter helper).
   const counters = newHeadingCounters();
@@ -113,6 +121,8 @@ export async function preparePrintHtml(
     const label = advanceHeadingCounter(counters, level);
     const text = h.textContent ?? "";
     if (!h.id) h.id = `toc-h-${i}`;
+    const refId = h.getAttribute("data-ref-id");
+    if (refId) refMap.set(refId, { id: h.id, label: `Seção ${label}` });
     if (opts.numberHeadings) {
       // Marked span (not a bare text node) so reimport paths can strip the
       // baked number deterministically — see lib/bakedHeadingNumbers.ts.
@@ -122,6 +132,21 @@ export async function preparePrintHtml(
       h.prepend(num);
     }
     entries.push({ level, text: opts.numberHeadings ? `${label} ${text}` : text, id: h.id });
+  });
+
+  // Cross-references become real anchors ("Figura 3" linking to the target);
+  // dangling ones print as "ref?" instead of vanishing silently.
+  doc.querySelectorAll("span[data-crossref]").forEach((el) => {
+    const t = refMap.get(el.getAttribute("data-crossref") ?? "");
+    if (t) {
+      const a = doc.createElement("a");
+      a.className = "crossref";
+      a.href = `#${t.id}`;
+      a.textContent = t.label;
+      el.replaceWith(a);
+    } else {
+      el.replaceWith(doc.createTextNode("ref?"));
+    }
   });
 
   // TOC placeholders → anchor list (page number via ::after + target-counter).
@@ -239,6 +264,7 @@ function buildPrintCss(opts: PrintOptions): string {
     .print-content [data-page-break] { break-after: page; border: none; height: 0; margin: 0; }
     .print-content p[data-caption] { font-size: 0.9em; text-align: center; margin: 0.4em 0 1.4em; break-before: avoid; }
     .print-content [data-baked-caption-num] { font-weight: 600; }
+    .print-content a.crossref { color: #000; text-decoration: none; }
     .print-content .page-break-label { display: none; }
     .print-content .footnote-ref { font-weight: 600; }
     .print-content .footnotes {

@@ -1,10 +1,15 @@
+import { useState } from "react";
 import { useEditorState } from "@tiptap/react";
 import { useEditorInstance } from "../../state/EditorContext";
+import { Modal } from "../../components/Modal";
+import { listCrossRefTargets, type CrossRefTarget } from "../CrossRef";
 import { Btn } from "./Btn";
 
 /** "Inserir": tabelas, imagem, link, quebras, notas, sumário, citações. */
 export function InsertTab({ onInsertImage }: { onInsertImage: () => void }) {
   const editor = useEditorInstance();
+  // null = picker fechado; a lista é recalculada na abertura, não a cada render.
+  const [refTargets, setRefTargets] = useState<CrossRefTarget[] | null>(null);
 
   const s = useEditorState({
     editor,
@@ -54,10 +59,46 @@ export function InsertTab({ onInsertImage }: { onInsertImage: () => void }) {
         <Btn onClick={() => chain().insertTableOfContents().run()} title="Sumário (índice dos títulos, com páginas no PDF)" wide>☰ Sumário</Btn>
         <Btn onClick={() => chain().insertTableOfContents("figures").run()} title="Lista de figuras (com páginas no PDF)" wide>🖼☰ L.Fig</Btn>
         <Btn onClick={() => chain().insertTableOfContents("tables").run()} title="Lista de tabelas (com páginas no PDF)" wide>▦☰ L.Tab</Btn>
+        <Btn
+          onClick={() => setRefTargets(listCrossRefTargets(editor.state.doc))}
+          title="Referência cruzada a título, figura ou tabela"
+          wide
+        >
+          ↪ Ref.
+        </Btn>
         <Btn onClick={() => chain().insertContent("[@").run()} title='Citação bibliográfica (ou digite "[@")' wide>❞ Citação</Btn>
         <Btn onClick={() => chain().insertBibliography().run()} title="Lista de referências das obras citadas" wide>📚 Refs</Btn>
         <Btn onClick={() => chain().toggleCodeBlock().run()} active={s.codeBlock} title="Bloco de código" wide>{"{ } Código"}</Btn>
       </div>
+
+      {refTargets && (
+        <Modal
+          title="Inserir referência cruzada"
+          onClose={() => setRefTargets(null)}
+          boxStyle={{ maxHeight: "60vh" }}
+        >
+          <div className="modal-body">
+            {refTargets.length === 0 && (
+              <p className="crossref-picker-empty">
+                Nenhum alvo disponível — crie títulos ou legendas de figura/tabela primeiro.
+              </p>
+            )}
+            {refTargets.map((t) => (
+              <button
+                key={t.pos}
+                className="crossref-target"
+                onClick={() => {
+                  chain().insertCrossRef(t.pos).run();
+                  setRefTargets(null);
+                }}
+              >
+                <strong>{t.label}</strong>
+                <span>{t.text || "(sem texto)"}</span>
+              </button>
+            ))}
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

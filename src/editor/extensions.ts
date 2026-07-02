@@ -18,6 +18,7 @@ import { FootnoteRef, Footnote, Footnotes } from "./Footnotes";
 import { MathInline } from "./Math";
 import { HeadingNumbers } from "./HeadingNumbers";
 import { Caption } from "./Caption";
+import { CrossRef, CrossRefTargets } from "./CrossRef";
 import { DocLayoutExtension } from "./DocLayout";
 import { TableOfContents } from "./TableOfContents";
 import { Citation, CitationSuggestion } from "./Citation";
@@ -68,6 +69,8 @@ export function buildExtensions() {
     MathInline,
     HeadingNumbers,
     Caption,
+    CrossRef,
+    CrossRefTargets,
     TableOfContents,
     Citation,
     CitationSuggestion,

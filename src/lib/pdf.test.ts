@@ -90,6 +90,23 @@ describe("preparePrintHtml", () => {
     expect(entries[0].textContent).toContain("Intro");
   });
 
+  it("resolve referências cruzadas para âncoras com rótulo", async () => {
+    const html =
+      '<h1 data-ref-id="ref-h1">Intro</h1>' +
+      '<p data-caption="figure" data-ref-id="ref-fig">um gato</p>' +
+      '<p>ver <span data-crossref="ref-fig"></span> na <span data-crossref="ref-h1"></span>' +
+      ' e <span data-crossref="ref-morto"></span></p>';
+    const doc = parse(await preparePrintHtml(html, { numberHeadings: false }));
+    const links = Array.from(doc.querySelectorAll("a.crossref"));
+    expect(links.map((a) => a.textContent)).toEqual(["Figura 1", "Seção 1"]);
+    // As âncoras apontam para elementos reais.
+    for (const a of links) {
+      expect(doc.getElementById(a.getAttribute("href")!.slice(1))).not.toBeNull();
+    }
+    // Referência pendurada vira texto visível, não some.
+    expect(doc.querySelector("p:last-of-type")?.textContent).toContain("ref?");
+  });
+
   it("citações sem engine carregada viram texto pandoc cru", async () => {
     const html = '<p>ver <span data-citation="" data-keys="silva2020"></span></p>';
     const doc = parse(await preparePrintHtml(html, { numberHeadings: false }));
