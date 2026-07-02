@@ -1,5 +1,6 @@
 import { advanceHeadingCounter, newHeadingCounters } from "../editor/HeadingNumbers";
 import { bakeCitationsInto } from "./citationStore";
+import { bakeCaptionsInto, type CaptionEntry } from "./captionNumbers";
 import { PAGE_SIZES } from "./pageGeometry";
 import { HeaderFooterSpec, PageFormat, PageMargins } from "./settings";
 
@@ -63,7 +64,8 @@ export async function preparePrintHtml(
     html.includes("data-toc") ||
     html.includes("data-citation") ||
     html.includes("data-bibliography") ||
-    html.includes("data-math");
+    html.includes("data-math") ||
+    html.includes("data-caption");
   if (!needsWork) return html;
 
   const doc = new DOMParser().parseFromString(html, "text/html");
@@ -96,6 +98,10 @@ export async function preparePrintHtml(
   // Page breaks: strip labels.
   doc.querySelectorAll("[data-page-break]").forEach((el) => el.replaceChildren());
 
+  // Captions: bake "Figura N — " labels (editor decorations don't serialize)
+  // and collect the entries for the figure/table lists below.
+  const captionEntries = bakeCaptionsInto(doc);
+
   // Headings: collect entries, assign anchor ids, optionally bake numbers.
   // Must mirror the editor's decoration logic (same counter helper).
   const counters = newHeadingCounters();
@@ -119,24 +125,38 @@ export async function preparePrintHtml(
   });
 
   // TOC placeholders → anchor list (page number via ::after + target-counter).
+  // data-toc="" lists headings; data-toc="figures"/"tables" lists captions.
+  const appendTocEntry = (nav: Element, href: string, text: string, level: number) => {
+    const a = doc.createElement("a");
+    a.href = href;
+    a.className = `toc-entry lvl-${level}`;
+    const title = doc.createElement("span");
+    title.className = "toc-title";
+    title.textContent = text;
+    const dots = doc.createElement("span");
+    dots.className = "toc-dots";
+    a.append(title, dots);
+    nav.appendChild(a);
+  };
   doc.querySelectorAll("nav[data-toc]").forEach((nav) => {
+    const kind = nav.getAttribute("data-toc");
     nav.className = "toc";
     nav.replaceChildren();
     const header = doc.createElement("div");
     header.className = "toc-header";
-    header.textContent = "Sumário";
     nav.appendChild(header);
+    if (kind === "figures" || kind === "tables") {
+      header.textContent = kind === "figures" ? "Lista de Figuras" : "Lista de Tabelas";
+      const want: CaptionEntry["kind"] = kind === "figures" ? "figure" : "table";
+      for (const c of captionEntries) {
+        if (c.kind !== want) continue;
+        appendTocEntry(nav, `#${c.id}`, `${c.label} — ${c.text}`, 1);
+      }
+      return;
+    }
+    header.textContent = "Sumário";
     for (const e of entries) {
-      const a = doc.createElement("a");
-      a.href = `#${e.id}`;
-      a.className = `toc-entry lvl-${e.level}`;
-      const title = doc.createElement("span");
-      title.className = "toc-title";
-      title.textContent = e.text;
-      const dots = doc.createElement("span");
-      dots.className = "toc-dots";
-      a.append(title, dots);
-      nav.appendChild(a);
+      appendTocEntry(nav, `#${e.id}`, e.text, e.level);
     }
   });
 
@@ -217,6 +237,8 @@ function buildPrintCss(opts: PrintOptions): string {
     .print-content table { border-collapse: collapse; width: 100%; }
     .print-content th, .print-content td { border: 1px solid #999; padding: 4px 8px; }
     .print-content [data-page-break] { break-after: page; border: none; height: 0; margin: 0; }
+    .print-content p[data-caption] { font-size: 0.9em; text-align: center; margin: 0.4em 0 1.4em; break-before: avoid; }
+    .print-content [data-baked-caption-num] { font-weight: 600; }
     .print-content .page-break-label { display: none; }
     .print-content .footnote-ref { font-weight: 600; }
     .print-content .footnotes {

@@ -112,7 +112,11 @@ const turndown = new TurndownService({
       return `[^${fnLabel(el.getAttribute("data-fn-ref")!)}]`;
     }
     if (el.nodeName === "NAV" && el.hasAttribute?.("data-toc")) {
-      return '\n\n<nav data-toc=""></nav>\n\n';
+      // The attribute value distinguishes Sumário / Lista de Figuras / Tabelas.
+      return `\n\n<nav data-toc="${el.getAttribute("data-toc") ?? ""}"></nav>\n\n`;
+    }
+    if (el.nodeName === "P" && el.hasAttribute?.("data-caption")) {
+      return `\n\n<p data-caption="${el.getAttribute("data-caption")}"></p>\n\n`;
     }
     if (el.nodeName === "DIV" && el.hasAttribute?.("data-bibliography")) {
       return '\n\n<div data-bibliography=""></div>\n\n';
@@ -127,6 +131,17 @@ turndown.use(gfm);
 // Subscript/superscript have no Markdown syntax; keep the raw HTML tags so the
 // round-trip survives (pandoc also reads <sub>/<sup> into DOCX/ODT natively).
 turndown.keep(["sub", "sup"]);
+
+// Captions have no Markdown form — keep them as raw HTML blocks (marked hands
+// block-level raw HTML back untouched, so the round-trip is lossless).
+turndown.addRule("captionBlock", {
+  filter: (node) => node.nodeName === "P" && node.hasAttribute("data-caption"),
+  replacement: (_content, node) => {
+    const el = node as HTMLElement;
+    const kind = el.getAttribute("data-caption") === "table" ? "table" : "figure";
+    return `\n\n<p data-caption="${kind}">${el.innerHTML}</p>\n\n`;
+  },
+});
 
 // Inline equations -> pandoc $latex$ syntax (round-trips through marked's
 // inlineMath extension above; pandoc's markdown reader also parses it, which

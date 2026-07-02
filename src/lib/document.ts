@@ -3,6 +3,7 @@ import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialo
 import { markdownToHtml, htmlToMarkdown, mathFromPandoc, stripFootnoteBackrefs } from "./markdown";
 import { bakeCitationsHtml } from "./citationStore";
 import { bakeHeadingNumbers, detectManualNumberingSequence, stripBakedHeadingNumbers } from "./bakedHeadingNumbers";
+import { bakeCaptionNumbers } from "./captionNumbers";
 import { bakeReviewForDocx, reviewFromPandoc } from "./reviewExport";
 import { loadSettings } from "./settings";
 import { settingsLayout, type DocLayout } from "../editor/DocLayout";
@@ -134,6 +135,11 @@ export async function saveDocumentTo(
   // editor regenerates the numbers from it.
   if (format !== "markdown" && numberHeadings) {
     html = bakeHeadingNumbers(html);
+  }
+  // Caption numbers are also decorations; bake them the same way. Markdown
+  // stays clean here too — the editor regenerates the numbers from the doc.
+  if (format !== "markdown") {
+    html = bakeCaptionNumbers(html);
   }
   if (PANDOC_FORMATS.has(format)) {
     // Word/ODT are one-way outputs for citations: bake them as formatted text

@@ -69,6 +69,21 @@ describe("htmlToMarkdown", () => {
     expect(md).toContain("[^1]: a nota");
   });
 
+  it("mantém legendas como HTML cru (com marcas inline)", () => {
+    const html = '<p data-caption="figure">um <em>gato</em></p>';
+    expect(htmlToMarkdown(html)).toContain('<p data-caption="figure">um <em>gato</em></p>');
+  });
+
+  it("faz roundtrip de legenda e lista de figuras via markdown", async () => {
+    const md = '<p data-caption="figure">um gato</p>\n\n<nav data-toc="figures"></nav>\n';
+    const html = await markdownToHtml(md);
+    expect(html).toContain('data-caption="figure"');
+    expect(html).toContain('data-toc="figures"');
+    const back = htmlToMarkdown(html);
+    expect(back).toContain('<p data-caption="figure">um gato</p>');
+    expect(back).toContain('<nav data-toc="figures"></nav>');
+  });
+
   it("faz roundtrip de equação inline", async () => {
     const md = "a fórmula $E=mc^2$ muda tudo\n";
     const html = await markdownToHtml(md);

@@ -58,6 +58,38 @@ describe("preparePrintHtml", () => {
     }
   });
 
+  it("assa números de legenda e monta listas de figuras/tabelas", async () => {
+    const html =
+      '<p data-caption="figure">um gato</p>' +
+      '<p data-caption="table">medições</p>' +
+      '<p data-caption="figure">um cão</p>' +
+      '<nav data-toc="figures"></nav><nav data-toc="tables"></nav>';
+    const doc = parse(await preparePrintHtml(html, { numberHeadings: false }));
+    const caps = Array.from(doc.querySelectorAll("p[data-caption]")).map((el) => el.textContent);
+    expect(caps).toEqual(["Figura 1 — um gato", "Tabela 1 — medições", "Figura 2 — um cão"]);
+
+    const figNav = doc.querySelector('nav[data-toc="figures"]')!;
+    expect(figNav.querySelector(".toc-header")?.textContent).toBe("Lista de Figuras");
+    const figEntries = Array.from(figNav.querySelectorAll("a.toc-entry"));
+    expect(figEntries.map((a) => a.textContent)).toEqual(["Figura 1 — um gato", "Figura 2 — um cão"]);
+    // Âncoras apontam para as legendas de verdade.
+    for (const a of figEntries) {
+      expect(doc.getElementById(a.getAttribute("href")!.slice(1))).not.toBeNull();
+    }
+
+    const tabNav = doc.querySelector('nav[data-toc="tables"]')!;
+    expect(tabNav.querySelector(".toc-header")?.textContent).toBe("Lista de Tabelas");
+    expect(tabNav.querySelectorAll("a.toc-entry").length).toBe(1);
+  });
+
+  it("sumário comum continua listando títulos, não legendas", async () => {
+    const html = '<nav data-toc=""></nav><h1>Intro</h1><p data-caption="figure">gato</p>';
+    const doc = parse(await preparePrintHtml(html, { numberHeadings: false }));
+    const entries = Array.from(doc.querySelectorAll('nav[data-toc=""] a.toc-entry'));
+    expect(entries.length).toBe(1);
+    expect(entries[0].textContent).toContain("Intro");
+  });
+
   it("citações sem engine carregada viram texto pandoc cru", async () => {
     const html = '<p>ver <span data-citation="" data-keys="silva2020"></span></p>';
     const doc = parse(await preparePrintHtml(html, { numberHeadings: false }));

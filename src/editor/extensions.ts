@@ -17,6 +17,7 @@ import Superscript from "@tiptap/extension-superscript";
 import { FootnoteRef, Footnote, Footnotes } from "./Footnotes";
 import { MathInline } from "./Math";
 import { HeadingNumbers } from "./HeadingNumbers";
+import { Caption } from "./Caption";
 import { DocLayoutExtension } from "./DocLayout";
 import { TableOfContents } from "./TableOfContents";
 import { Citation, CitationSuggestion } from "./Citation";
@@ -66,6 +67,7 @@ export function buildExtensions() {
     Footnotes,
     MathInline,
     HeadingNumbers,
+    Caption,
     TableOfContents,
     Citation,
     CitationSuggestion,

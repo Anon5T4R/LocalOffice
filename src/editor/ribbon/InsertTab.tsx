@@ -50,7 +50,10 @@ export function InsertTab({ onInsertImage }: { onInsertImage: () => void }) {
         <Btn onClick={() => chain().setPageBreak().run()} title="Quebra de página (nova página no PDF)" wide>⤓ Quebra</Btn>
         <Btn onClick={() => chain().addFootnote().run()} title="Nota de rodapé (Ctrl+Alt+F)" wide>⁺ Nota</Btn>
         <Btn onClick={() => chain().insertMath().run()} title='Equação LaTeX (ou digite "$x$" no texto)' wide>√x Equação</Btn>
+        <Btn onClick={() => chain().insertCaption().run()} title="Legenda numerada para a figura/tabela selecionada" wide>🏷 Legenda</Btn>
         <Btn onClick={() => chain().insertTableOfContents().run()} title="Sumário (índice dos títulos, com páginas no PDF)" wide>☰ Sumário</Btn>
+        <Btn onClick={() => chain().insertTableOfContents("figures").run()} title="Lista de figuras (com páginas no PDF)" wide>🖼☰ L.Fig</Btn>
+        <Btn onClick={() => chain().insertTableOfContents("tables").run()} title="Lista de tabelas (com páginas no PDF)" wide>▦☰ L.Tab</Btn>
         <Btn onClick={() => chain().insertContent("[@").run()} title='Citação bibliográfica (ou digite "[@")' wide>❞ Citação</Btn>
         <Btn onClick={() => chain().insertBibliography().run()} title="Lista de referências das obras citadas" wide>📚 Refs</Btn>
         <Btn onClick={() => chain().toggleCodeBlock().run()} active={s.codeBlock} title="Bloco de código" wide>{"{ } Código"}</Btn>

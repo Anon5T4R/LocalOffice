@@ -908,6 +908,18 @@ body {
   padding: 0 6px;
 }
 
+/* ---- Figure/table captions ---- */
+.ProseMirror p[data-caption] {
+  font-size: 0.88em;
+  text-align: center;
+  color: var(--muted, #666);
+  margin: 4px 0 16px;
+}
+
+.caption-num {
+  font-weight: 600;
+}
+
 /* ---- Inline math (KaTeX) ---- */
 .math-inline {
   border-radius: 4px;
