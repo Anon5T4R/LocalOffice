@@ -19,7 +19,7 @@ pub(crate) async fn list_system_fonts() -> Result<Vec<String>, String> {
             scan_font_dir(&dir, &mut names);
         }
         let mut sorted: Vec<_> = names.into_iter().collect();
-        sorted.sort_by(|a, b| a.to_lowercase().cmp(&b.to_lowercase()));
+        sorted.sort_by_key(|name| name.to_lowercase());
         sorted
     })
     .await

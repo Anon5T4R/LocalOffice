@@ -1,5 +1,26 @@
 use tauri_plugin_shell::ShellExt;
 
+/// Run the bundled pandoc sidecar with `args` and return its stdout.
+/// `label` names the operation in error messages ("import", "export", …).
+async fn run_pandoc(app: &tauri::AppHandle, args: &[&str], label: &str) -> Result<String, String> {
+    let output = app
+        .shell()
+        .sidecar("pandoc")
+        .map_err(|e| format!("sidecar pandoc indisponível: {}", e))?
+        .args(args)
+        .output()
+        .await
+        .map_err(|e| format!("falha ao executar pandoc: {}", e))?;
+    if !output.status.success() {
+        return Err(format!(
+            "pandoc ({}) falhou: {}",
+            label,
+            String::from_utf8_lossy(&output.stderr)
+        ));
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
 /// Convert a binary document (docx/odt) into editor HTML via the bundled pandoc sidecar.
 #[tauri::command]
 pub(crate) async fn import_via_pandoc(
@@ -7,41 +28,21 @@ pub(crate) async fn import_via_pandoc(
     path: String,
     from: String,
 ) -> Result<String, String> {
-    let output = app
-        .shell()
-        .sidecar("pandoc")
-        .map_err(|e| format!("sidecar pandoc indisponível: {}", e))?
-        // --track-changes=all keeps Word comments and tracked changes as spans
-        // (the JS side maps them to review marks).
-        .args([path.as_str(), "-f", from.as_str(), "-t", "html", "--wrap=none", "--track-changes=all"])
-        .output()
-        .await
-        .map_err(|e| format!("falha ao executar pandoc: {}", e))?;
-    if !output.status.success() {
-        return Err(format!("pandoc (import) falhou: {}", String::from_utf8_lossy(&output.stderr)));
-    }
-    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+    // --track-changes=all keeps Word comments and tracked changes as spans
+    // (the JS side maps them to review marks).
+    run_pandoc(
+        &app,
+        &[path.as_str(), "-f", from.as_str(), "-t", "html", "--wrap=none", "--track-changes=all"],
+        "import",
+    )
+    .await
 }
 
 /// Convert a BibTeX/BibLaTeX bibliography into CSL-JSON via the pandoc sidecar.
 /// (CSL-JSON files are read directly on the JS side; this is only for .bib.)
 #[tauri::command]
 pub(crate) async fn import_bibliography(app: tauri::AppHandle, path: String) -> Result<String, String> {
-    let output = app
-        .shell()
-        .sidecar("pandoc")
-        .map_err(|e| format!("sidecar pandoc indisponível: {}", e))?
-        .args([path.as_str(), "-f", "biblatex", "-t", "csljson"])
-        .output()
-        .await
-        .map_err(|e| format!("falha ao executar pandoc: {}", e))?;
-    if !output.status.success() {
-        return Err(format!(
-            "pandoc (bibliografia) falhou: {}",
-            String::from_utf8_lossy(&output.stderr)
-        ));
-    }
-    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+    run_pandoc(&app, &[path.as_str(), "-f", "biblatex", "-t", "csljson"], "bibliografia").await
 }
 
 /// Convert editor content into a binary document (docx/odt) at `path` via pandoc.
@@ -66,19 +67,13 @@ pub(crate) async fn export_via_pandoc(
         .map_err(|e| format!("falha ao gravar temp: {}", e))?;
     let tmp_str = tmp.to_string_lossy().to_string();
 
-    let result = app
-        .shell()
-        .sidecar("pandoc")
-        .map_err(|e| format!("sidecar pandoc indisponível: {}", e))?
-        .args([tmp_str.as_str(), "-f", from.as_str(), "-t", to.as_str(), "-o", path.as_str()])
-        .output()
-        .await;
+    let result = run_pandoc(
+        &app,
+        &[tmp_str.as_str(), "-f", from.as_str(), "-t", to.as_str(), "-o", path.as_str()],
+        "export",
+    )
+    .await;
 
     let _ = tokio::fs::remove_file(&tmp).await;
-
-    let output = result.map_err(|e| format!("falha ao executar pandoc: {}", e))?;
-    if !output.status.success() {
-        return Err(format!("pandoc (export) falhou: {}", String::from_utf8_lossy(&output.stderr)));
-    }
-    Ok(())
+    result.map(|_| ())
 }

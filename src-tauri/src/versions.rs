@@ -148,7 +148,7 @@ pub(crate) async fn list_versions(
             }
         })
         .collect();
-    out.sort_by(|a, b| b.ts.cmp(&a.ts)); // newest first
+    out.sort_by_key(|v| std::cmp::Reverse(v.ts)); // newest first
     Ok(out)
 }
 

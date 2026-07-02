@@ -142,9 +142,8 @@ async fn wait_for_port(port: u16, secs: u64) -> Result<(), String> {
     let addr: SocketAddr = ([127, 0, 0, 1], port).into();
     let attempts = secs * 4;
     for _ in 0..attempts {
-        match tokio::time::timeout(Duration::from_millis(200), TcpStream::connect(addr)).await {
-            Ok(Ok(_)) => return Ok(()),
-            _ => {}
+        if let Ok(Ok(_)) = tokio::time::timeout(Duration::from_millis(200), TcpStream::connect(addr)).await {
+            return Ok(());
         }
         sleep(Duration::from_millis(250)).await;
     }
