@@ -42,6 +42,18 @@ export function recomputePageChrome(editor: Editor): void {
   scheduleByView.get(editor.view)?.();
 }
 
+/**
+ * Line-level split data for a paragraph, produced LAZILY -- only for a block
+ * that actually straddles a page boundary. `lineHeights` come from cheap
+ * getClientRects; `posOfLine` runs the expensive `posAtCoords` and is called
+ * only for the lines that actually become break points (usually one), which
+ * is what keeps a large document's remeasure affordable.
+ */
+export interface SplitInfo {
+  lineHeights: number[];
+  posOfLine: (i: number) => number;
+}
+
 export interface MeasuredBlock {
   /** ProseMirror position right before this top-level block. */
   offset: number;
@@ -50,6 +62,9 @@ export interface MeasuredBlock {
   /** True for a manual page-break node -- forces whatever follows onto a
    *  fresh page regardless of room left on the current one. */
   isManualBreak: boolean;
+  /** Present on splittable paragraphs; invoked only when the block straddles
+   *  a boundary, to break it between lines (M2) instead of pushing it whole. */
+  splitLines?: () => SplitInfo;
 }
 
 export interface PageBreakPoint {
@@ -58,11 +73,14 @@ export interface PageBreakPoint {
 }
 
 /**
- * Pure break-placement algorithm (block granularity -- M1 of the plan; a
- * block that doesn't fit starts the next page whole, never split mid-block.
- * Line-level splitting is M2, tracked separately). Kept free of DOM/PM-view
- * access so it can be unit tested without a real layout engine -- the DOM
- * measurement lives in buildPageBreakState below.
+ * Pure break-placement algorithm. Accumulates unit heights and starts a new
+ * page before any unit that would overflow the printable height. A "unit" is
+ * normally a whole block; a splittable paragraph that straddles a boundary is
+ * expanded into its lines on demand (via `splitLines`) so the break can fall
+ * between its lines (M2). `used > 0` guards the first unit of a page: an
+ * oversized unit still gets its own page rather than an infinite run of empty
+ * breaks. Kept free of live-DOM access (the measurement is injected through
+ * `height`/`splitLines`) so it can be unit tested without a layout engine.
  */
 export function computeBreakPoints(blocks: MeasuredBlock[], printable: number): PageBreakPoint[] {
   const points: PageBreakPoint[] = [];
@@ -70,20 +88,30 @@ export function computeBreakPoints(blocks: MeasuredBlock[], printable: number): 
   let pageNumber = 1;
   let forceBreakBefore = false;
 
-  for (const block of blocks) {
-    const mustBreak = forceBreakBefore;
-    forceBreakBefore = block.isManualBreak;
+  const breakBefore = (offset: number) => {
+    pageNumber++;
+    points.push({ offset, pageNumber });
+    used = 0;
+  };
 
-    // `used > 0` guards the very first block of a page: an oversized block
-    // (taller than one page) still gets its own page rather than an
-    // infinite run of empty breaks -- it just overflows visually. M1 does
-    // not split content mid-block.
-    if (mustBreak || (used > 0 && used + block.height > printable)) {
-      pageNumber++;
-      points.push({ offset: block.offset, pageNumber });
-      used = 0;
+  for (const block of blocks) {
+    const straddles = used + block.height > printable;
+    if (block.splitLines && straddles && !block.isManualBreak) {
+      const info = block.splitLines();
+      for (let i = 0; i < info.lineHeights.length; i++) {
+        const h = info.lineHeights[i];
+        if (forceBreakBefore || (used > 0 && used + h > printable)) {
+          breakBefore(i === 0 ? block.offset : info.posOfLine(i));
+        }
+        forceBreakBefore = false;
+        used += h;
+      }
+    } else {
+      if (forceBreakBefore || (used > 0 && straddles)) breakBefore(block.offset);
+      forceBreakBefore = false;
+      used += block.height;
     }
-    used += block.height;
+    if (block.isManualBreak) forceBreakBefore = true;
   }
 
   return points;
@@ -233,67 +261,48 @@ function paragraphLines(dom: HTMLElement): LineRect[] {
 }
 
 /**
- * Turn the document into break units (M2). Most top-level blocks are one
- * atomic unit; a multi-line PARAGRAPH becomes one unit per line so a break
- * can fall between its lines (mid-paragraph split, as Word does). The first
- * line's unit breaks at the block boundary (a clean whole-paragraph push);
- * later lines break at their in-paragraph start position, found via
- * `posAtCoords`. Headings, images, tables and lists stay atomic for now
- * (headings to avoid orphan fragments; the rest can't split yet).
+ * Lazy line-split measurement for one paragraph (M2). Returns per-line
+ * heights (from cheap getClientRects) and a `posOfLine` that resolves a
+ * line's in-paragraph start position via `posAtCoords` -- the expensive part,
+ * so it's deferred and only invoked for the lines that actually become break
+ * points. Called only for paragraphs that straddle a page boundary, which is
+ * what keeps a large document's remeasure fast (the profile without this was
+ * ~2s on a 44-page doc; almost all of it was posAtCoords on every line).
  */
-function measureUnits(view: EditorView, zoomFactor: number): MeasuredBlock[] {
-  const { doc } = view.state;
-  const units: MeasuredBlock[] = [];
-  doc.forEach((node, offset) => {
-    const dom = view.nodeDOM(offset) as HTMLElement | null;
-    const isManualBreak = node.type.name === "pageBreak";
-    if (!dom || dom.nodeType !== 1) {
-      units.push({ offset, height: 0, isManualBreak });
-      return;
-    }
-    const box = dom.getBoundingClientRect();
-    const blockHeight = box.height / zoomFactor;
-    if (node.type.name !== "paragraph") {
-      units.push({ offset, height: blockHeight, isManualBreak });
-      return;
-    }
-    const lines = paragraphLines(dom);
-    if (lines.length <= 1) {
-      units.push({ offset, height: blockHeight, isManualBreak: false });
-      return;
-    }
-    const lineUnits: MeasuredBlock[] = [];
-    let ok = true;
-    for (let i = 0; i < lines.length; i++) {
+function measureSplit(view: EditorView, dom: HTMLElement, offset: number, blockHeight: number, zoomFactor: number): SplitInfo {
+  const lines = paragraphLines(dom);
+  if (lines.length <= 1) return { lineHeights: [blockHeight], posOfLine: () => offset };
+  const box = dom.getBoundingClientRect();
+  const lineHeights: number[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    // Height as the gap to the next line's top (last line runs to the block
+    // bottom) so the line heights sum to the block height, keeping pagination
+    // consistent with the cheap block-level pass.
+    const nextTop = i + 1 < lines.length ? lines[i + 1].top : box.bottom;
+    lineHeights.push((nextTop - lines[i].top) / zoomFactor);
+  }
+  return {
+    lineHeights,
+    posOfLine: (i) => {
+      if (i === 0) return offset;
       const line = lines[i];
-      // Height as the gap to the next line's top (last line runs to the
-      // block bottom) so the units sum to the block height -- keeps
-      // pagination consistent with the block-level measurement.
-      const nextTop = i + 1 < lines.length ? lines[i + 1].top : box.bottom;
-      const height = (nextTop - line.top) / zoomFactor;
-      let pos = offset;
-      if (i > 0) {
-        const at = view.posAtCoords({ left: line.left + 1, top: (line.top + line.bottom) / 2 });
-        if (!at || at.pos <= lineUnits[i - 1].offset) {
-          ok = false; // can't resolve a clean split point -> fall back to atomic
-          break;
-        }
-        pos = at.pos;
-      }
-      lineUnits.push({ offset: pos, height, isManualBreak: false });
-    }
-    if (ok) units.push(...lineUnits);
-    else units.push({ offset, height: blockHeight, isManualBreak: false });
-  });
-  return units;
+      const at = view.posAtCoords({ left: line.left + 1, top: (line.top + line.bottom) / 2 });
+      // Fallback to the block boundary if the hit-test misses (rare): the
+      // paragraph just moves whole instead of splitting at that line.
+      return at ? at.pos : offset;
+    },
+  };
 }
 
 /**
- * Where real page breaks fall, plus the per-page header/footer chrome. Reads
- * rendered heights straight from the DOM (view.nodeDOM), normalized by the
- * current zoom -- CSS `zoom` (unlike `transform`) changes layout geometry
- * itself, so getBoundingClientRect() is already scaled and has to be divided
- * back down, or the break points drift as the user zooms.
+ * Where real page breaks fall, plus the per-page header/footer chrome. Two
+ * passes: a cheap one measuring every top-level block's height
+ * (getBoundingClientRect only), then -- inside computeBreakPoints -- a lazy
+ * line-level pass (getClientRects + posAtCoords) for ONLY the paragraphs that
+ * straddle a boundary. Heights are normalized by the current zoom: CSS `zoom`
+ * (unlike `transform`) changes layout geometry itself, so
+ * getBoundingClientRect() is already scaled and has to be divided back down,
+ * or the break points drift as the user zooms.
  */
 function buildPageBreakState(view: EditorView): PageBreakState {
   const { doc } = view.state;
@@ -315,16 +324,33 @@ function buildPageBreakState(view: EditorView): PageBreakState {
   gaps.forEach((g) => {
     g.style.display = "none";
   });
-  let units: MeasuredBlock[];
+  let points: PageBreakPoint[];
   try {
-    units = measureUnits(view, zoomFactor);
+    // Cheap pass: one getBoundingClientRect per block. The line-level split
+    // measurement is attached as a lazy `splitLines` closure that
+    // computeBreakPoints invokes only when the block straddles a boundary.
+    const blocks: MeasuredBlock[] = [];
+    doc.forEach((node, offset) => {
+      const dom = view.nodeDOM(offset) as HTMLElement | null;
+      const isManualBreak = node.type.name === "pageBreak";
+      if (!dom || dom.nodeType !== 1) {
+        blocks.push({ offset, height: 0, isManualBreak });
+        return;
+      }
+      const height = dom.getBoundingClientRect().height / zoomFactor;
+      // Only plain paragraphs split by line; everything else stays atomic
+      // (headings avoid orphan fragments; images/tables/lists can't split yet).
+      const splitLines =
+        node.type.name === "paragraph" ? () => measureSplit(view, dom, offset, height, zoomFactor) : undefined;
+      blocks.push({ offset, height, isManualBreak, splitLines });
+    });
+    points = computeBreakPoints(blocks, printable);
   } finally {
     gaps.forEach((g, i) => {
       g.style.display = prevDisplay[i];
     });
   }
 
-  const points = computeBreakPoints(units, printable);
   const pageCount = points.length + 1;
 
   const ctx: ChromeContext = {

@@ -61,19 +61,44 @@ describe("computeBreakPoints", () => {
     expect(computeBreakPoints([], 1000)).toEqual([]);
   });
 
-  it("M2: unidades de linha do mesmo parágrafo quebram no meio (offset intra-parágrafo)", () => {
-    // measureUnits emite uma unidade por linha; a 1ª linha quebra no início
-    // do bloco (offset 10) e as demais nas posições internas do parágrafo
-    // (11, 12, ...). computeBreakPoints não distingue bloco de linha -- só
-    // acumula altura e quebra antes da unidade que estoura.
-    const lineUnits = [
-      { offset: 10, height: 400, isManualBreak: false }, // linha 1 (início do parágrafo)
-      { offset: 11, height: 400, isManualBreak: false }, // linha 2 (dentro do parágrafo)
-      { offset: 12, height: 400, isManualBreak: false }, // linha 3 (dentro do parágrafo)
-    ];
-    const points = computeBreakPoints(lineUnits, 1000);
-    // 400+400 cabe; +400 estoura -> quebra antes da linha 3, num offset que
-    // é interno ao parágrafo (12), não um limite de bloco.
+  it("M2: um parágrafo que estoura é dividido entre linhas via splitLines (offset intra-parágrafo)", () => {
+    // O bloco (altura 1200 > printable 1000) só expande em linhas porque
+    // straddles; posOfLine só é chamado para a linha que vira quebra.
+    const posCalls: number[] = [];
+    const block = {
+      offset: 10,
+      height: 1200,
+      isManualBreak: false,
+      splitLines: () => ({
+        lineHeights: [400, 400, 400],
+        posOfLine: (i: number) => {
+          posCalls.push(i);
+          return [10, 11, 12][i];
+        },
+      }),
+    };
+    const points = computeBreakPoints([block], 1000);
+    // 400+400 cabe; +400 estoura -> quebra antes da 3ª linha, num offset
+    // interno ao parágrafo (12), não um limite de bloco.
     expect(points).toEqual([{ offset: 12, pageNumber: 2 }]);
+    // posOfLine chamado só para a linha que virou quebra (índice 2), não para
+    // todas -- é o que torna a remedição barata em doc grande.
+    expect(posCalls).toEqual([2]);
+  });
+
+  it("M2: parágrafo divisível que cabe na sobra NÃO chama splitLines (custo evitado)", () => {
+    let called = false;
+    const filler = { offset: 0, height: 900, isManualBreak: false };
+    const para = {
+      offset: 10,
+      height: 50, // cabe na sobra (900+50 <= 1000)
+      isManualBreak: false,
+      splitLines: () => {
+        called = true;
+        return { lineHeights: [50], posOfLine: () => 10 };
+      },
+    };
+    computeBreakPoints([filler, para], 1000);
+    expect(called).toBe(false);
   });
 });
