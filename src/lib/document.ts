@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
-import { markdownToHtml, htmlToMarkdown, stripFootnoteBackrefs } from "./markdown";
+import { markdownToHtml, htmlToMarkdown, mathFromPandoc, stripFootnoteBackrefs } from "./markdown";
 import { bakeCitationsHtml } from "./citationStore";
 import { bakeHeadingNumbers, detectManualNumberingSequence, stripBakedHeadingNumbers } from "./bakedHeadingNumbers";
 import { bakeReviewForDocx, reviewFromPandoc } from "./reviewExport";
@@ -10,6 +10,11 @@ import { settingsLayout, type DocLayout } from "../editor/DocLayout";
 /** Whether the editor HTML carries footnotes (drives the DOCX/ODT export path). */
 function hasFootnotes(html: string): boolean {
   return html.includes("data-fn-ref") || html.includes("data-footnotes");
+}
+
+/** Whether the editor HTML carries equations (also drives the export path). */
+function hasMath(html: string): boolean {
+  return html.includes("data-math");
 }
 
 // Formats the app can round-trip. markdown/html in pure JS; docx/odt/rtf via
@@ -102,7 +107,7 @@ async function readToHtml(path: string, format: DocFormat): Promise<{ html: stri
     // No embedded layout for pandoc formats — fall back to Settings, same as
     // the numberHeadings-driven strip did before layout became per-document.
     const stripUnmarked = loadSettings().numberHeadings === true;
-    return resolveHeadingNumbers(reviewFromPandoc(stripFootnoteBackrefs(html)), stripUnmarked, null);
+    return resolveHeadingNumbers(mathFromPandoc(reviewFromPandoc(stripFootnoteBackrefs(html))), stripUnmarked, null);
   }
   const rawFile = await invoke<string>("read_text_file", { path });
   const { raw, layout } = extractLayout(rawFile);
@@ -135,10 +140,11 @@ export async function saveDocumentTo(
     // (a Word user without Zotero still reads the document correctly).
     // Comments and tracked changes become native Word review data.
     const baked = bakeReviewForDocx(bakeCitationsHtml(html));
-    // pandoc's HTML reader can't turn our footnote markup into native notes, so
-    // for docs with footnotes we go through Markdown ([^n]) which it maps to real
-    // Word/ODT footnotes. Plain docs stay on the higher-fidelity HTML path.
-    if (hasFootnotes(baked)) {
+    // pandoc's HTML reader can't turn our footnote markup into native notes,
+    // nor our math spans into equations — for docs with either we go through
+    // Markdown ([^n] / $latex$), which pandoc maps to real Word/ODT footnotes
+    // and native OMML equations. Plain docs stay on the higher-fidelity HTML path.
+    if (hasFootnotes(baked) || hasMath(baked)) {
       await invoke("export_via_pandoc", { path, content: htmlToMarkdown(baked), from: "markdown", to: format });
     } else {
       await invoke("export_via_pandoc", { path, content: baked, from: "html", to: format });

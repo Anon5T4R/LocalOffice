@@ -49,20 +49,34 @@ export interface PrintOptions {
  * - TOC placeholders (`nav[data-toc]`) become a real list of anchors; the page
  *   numbers are filled by CSS `target-counter` during pagination.
  * - Citations and the bibliography become formatted static text.
+ * - Math spans are rendered by KaTeX into static markup (async: KaTeX lives in
+ *   its own lazy chunk — the reason this whole function is async).
  */
-export function preparePrintHtml(html: string, opts: Pick<PrintOptions, "numberHeadings">): string {
+export async function preparePrintHtml(
+  html: string,
+  opts: Pick<PrintOptions, "numberHeadings">
+): Promise<string> {
   const needsWork =
     opts.numberHeadings ||
     html.includes("data-fn-ref") ||
     html.includes("data-page-break") ||
     html.includes("data-toc") ||
     html.includes("data-citation") ||
-    html.includes("data-bibliography");
+    html.includes("data-bibliography") ||
+    html.includes("data-math");
   if (!needsWork) return html;
 
   const doc = new DOMParser().parseFromString(html, "text/html");
 
   bakeCitationsInto(doc);
+
+  // Math: bake KaTeX output as static markup. The editor renders math through
+  // a NodeView, which doesn't serialize — without this step printed math would
+  // be raw LaTeX source.
+  if (html.includes("data-math")) {
+    const { renderMathInto } = await import("./mathRender");
+    renderMathInto(doc);
+  }
 
   // Footnotes: bake numbers.
   const order = new Map<string, number>();
@@ -301,7 +315,7 @@ async function doRenderPaged(
   wipePagedOutput(container);
 
   const template = document.createElement("template");
-  template.innerHTML = `<div class="print-content">${preparePrintHtml(contentHtml, opts)}</div>`;
+  template.innerHTML = `<div class="print-content">${await preparePrintHtml(contentHtml, opts)}</div>`;
 
   const cssUrl = URL.createObjectURL(
     new Blob([buildPrintCss(opts)], { type: "text/css" })
@@ -336,12 +350,13 @@ async function doRenderPaged(
  * Old print path: dump the content into a hidden print root and let the
  * browser paginate. No page numbers or headers, but it always works.
  */
-export function printLegacy(contentHtml: string, opts: PrintOptions): void {
+export async function printLegacy(contentHtml: string, opts: PrintOptions): Promise<void> {
+  const prepared = await preparePrintHtml(contentHtml, opts);
   document.getElementById("print-root")?.remove();
 
   const root = document.createElement("div");
   root.id = "print-root";
-  root.innerHTML = `<div class="print-content">${preparePrintHtml(contentHtml, opts)}</div>`;
+  root.innerHTML = `<div class="print-content">${prepared}</div>`;
 
   // margin:0 leaves no room for the browser's own header/footer (date, title,
   // page number, URL); the visual margins live in .print-content padding.
@@ -359,5 +374,8 @@ export function printLegacy(contentHtml: string, opts: PrintOptions): void {
   window.addEventListener("afterprint", cleanup);
   setTimeout(cleanup, 60000);
 
+  // Webfonts (KaTeX's, custom fonts) may still be loading; printing before
+  // they land would rasterize fallback glyphs into the PDF.
+  await document.fonts.ready;
   window.print();
 }

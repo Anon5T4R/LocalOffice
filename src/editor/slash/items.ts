@@ -129,6 +129,15 @@ const ITEMS: SlashItem[] = [
     },
   },
   {
+    title: "Equação",
+    subtitle: 'Fórmula LaTeX (ou digite "$x$")',
+    icon: "√x",
+    keywords: "equacao formula matematica math latex katex",
+    command: ({ editor, range }) => {
+      editor.chain().focus().deleteRange(range).insertMath().run();
+    },
+  },
+  {
     title: "Nota de rodapé",
     subtitle: "Referência + nota no fim",
     icon: "⁺",

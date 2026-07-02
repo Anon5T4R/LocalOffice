@@ -15,6 +15,7 @@ import TaskItem from "@tiptap/extension-task-item";
 import Subscript from "@tiptap/extension-subscript";
 import Superscript from "@tiptap/extension-superscript";
 import { FootnoteRef, Footnote, Footnotes } from "./Footnotes";
+import { MathInline } from "./Math";
 import { HeadingNumbers } from "./HeadingNumbers";
 import { DocLayoutExtension } from "./DocLayout";
 import { TableOfContents } from "./TableOfContents";
@@ -63,6 +64,7 @@ export function buildExtensions() {
     FootnoteRef,
     Footnote,
     Footnotes,
+    MathInline,
     HeadingNumbers,
     TableOfContents,
     Citation,

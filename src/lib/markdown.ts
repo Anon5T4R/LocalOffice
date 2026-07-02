@@ -48,10 +48,36 @@ function pandocToCitationSpan(inner: string): string {
   return `<span ${attrs.join(" ")}></span>`;
 }
 
+/** Minimal HTML escaping for attribute values and text content. */
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
 marked.setOptions({ gfm: true, breaks: false });
 marked.use(markedFootnote());
 marked.use({
   extensions: [
+    {
+      // Pandoc tex_math_dollars: $latex$ becomes an inline equation. Currency
+      // guard: the opening $ can't be followed by whitespace, the closing $
+      // can't be preceded by whitespace nor followed by a digit, and the
+      // content must have something beyond digits/punctuation — so
+      // "custa $50 e $60" stays plain text.
+      name: "inlineMath",
+      level: "inline",
+      start(src: string) {
+        return src.indexOf("$");
+      },
+      tokenizer(src: string) {
+        const m = /^\$(?=[^$\n]*[^\d\s.,$])([^\s$](?:[^$\n]*[^\s$])?)\$(?!\d)/.exec(src);
+        if (!m) return undefined;
+        return { type: "inlineMath", raw: m[0], text: m[1] };
+      },
+      renderer(token) {
+        const latex = (token as unknown as { text: string }).text;
+        return `<span data-math="" data-latex="${escapeHtml(latex)}">${escapeHtml(latex)}</span>`;
+      },
+    },
     {
       name: "pandocCitation",
       level: "inline",
@@ -102,6 +128,18 @@ turndown.use(gfm);
 // round-trip survives (pandoc also reads <sub>/<sup> into DOCX/ODT natively).
 turndown.keep(["sub", "sup"]);
 
+// Inline equations -> pandoc $latex$ syntax (round-trips through marked's
+// inlineMath extension above; pandoc's markdown reader also parses it, which
+// is how DOCX export gets native Word equations).
+turndown.addRule("mathInline", {
+  filter: (node) => node.nodeName === "SPAN" && node.hasAttribute("data-math"),
+  replacement: (_content, node) => {
+    const el = node as HTMLElement;
+    const latex = (el.getAttribute("data-latex") ?? el.textContent ?? "").trim();
+    return latex ? `$${latex}$` : "";
+  },
+});
+
 // Review data has no Markdown form — degrade gracefully: comments and pending
 // insertions keep their text, pending deletions become GFM strikethrough.
 turndown.addRule("reviewSpans", {
@@ -138,6 +176,34 @@ turndown.addRule("footnotesSection", {
     return defs.length ? "\n\n" + defs.join("\n") + "\n" : "";
   },
 });
+
+/**
+ * Convert pandoc's math spans (`<span class="math inline">\(E=mc^2\)</span>`,
+ * emitted with --mathjax so the TeX source survives) into this app's
+ * `span[data-math]` form. Display math (`\[...\]`) becomes inline — the
+ * editor's math node is inline-only.
+ */
+export function mathFromPandoc(html: string): string {
+  if (!html.includes('class="math')) return html;
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  doc.querySelectorAll("span.math").forEach((el) => {
+    const latex = (el.textContent ?? "")
+      .trim()
+      .replace(/^\\[([]/, "")
+      .replace(/\\[)\]]$/, "")
+      .trim();
+    if (!latex) {
+      el.remove();
+      return;
+    }
+    const span = doc.createElement("span");
+    span.setAttribute("data-math", "");
+    span.setAttribute("data-latex", latex);
+    span.textContent = latex;
+    el.replaceWith(span);
+  });
+  return doc.body.innerHTML;
+}
 
 /** Drop the "↩" backlinks pandoc / marked-footnote add inside note bodies. */
 export function stripFootnoteBackrefs(html: string): string {

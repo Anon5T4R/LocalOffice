@@ -908,6 +908,22 @@ body {
   padding: 0 6px;
 }
 
+/* ---- Inline math (KaTeX) ---- */
+.math-inline {
+  border-radius: 4px;
+  padding: 0 2px;
+  cursor: default;
+}
+
+.math-inline:hover {
+  background: var(--hover, rgba(37, 99, 235, 0.1));
+}
+
+.ProseMirror-selectednode.math-inline,
+.math-inline.ProseMirror-selectednode {
+  outline: 2px solid var(--accent, #2563eb);
+}
+
 /* ---- Citations & bibliography ---- */
 .citation {
   background: var(--hover, rgba(37, 99, 235, 0.1));

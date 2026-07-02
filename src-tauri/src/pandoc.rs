@@ -29,10 +29,21 @@ pub(crate) async fn import_via_pandoc(
     from: String,
 ) -> Result<String, String> {
     // --track-changes=all keeps Word comments and tracked changes as spans
-    // (the JS side maps them to review marks).
+    // (the JS side maps them to review marks). --mathjax makes equations come
+    // out as \(...\) with the TeX source intact (the default renders them to
+    // lossy Unicode); the JS side maps those spans to math nodes.
     run_pandoc(
         &app,
-        &[path.as_str(), "-f", from.as_str(), "-t", "html", "--wrap=none", "--track-changes=all"],
+        &[
+            path.as_str(),
+            "-f",
+            from.as_str(),
+            "-t",
+            "html",
+            "--wrap=none",
+            "--track-changes=all",
+            "--mathjax",
+        ],
         "import",
     )
     .await
