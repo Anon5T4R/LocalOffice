@@ -22,3 +22,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Agent-local config and internal working docs
+.claude/
+plano.md
+DOCUMENTACAO.md

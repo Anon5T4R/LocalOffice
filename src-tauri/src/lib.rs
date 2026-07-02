@@ -58,7 +58,9 @@ async fn import_via_pandoc(app: tauri::AppHandle, path: String, from: String) ->
         .shell()
         .sidecar("pandoc")
         .map_err(|e| format!("sidecar pandoc indisponível: {}", e))?
-        .args([path.as_str(), "-f", from.as_str(), "-t", "html", "--wrap=none"])
+        // --track-changes=all keeps Word comments and tracked changes as spans
+        // (the JS side maps them to review marks).
+        .args([path.as_str(), "-f", from.as_str(), "-t", "html", "--wrap=none", "--track-changes=all"])
         .output()
         .await
         .map_err(|e| format!("falha ao executar pandoc: {}", e))?;
@@ -68,31 +70,58 @@ async fn import_via_pandoc(app: tauri::AppHandle, path: String, from: String) ->
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
-/// Convert editor HTML into a binary document (docx/odt) at `path` via pandoc.
+/// Convert a BibTeX/BibLaTeX bibliography into CSL-JSON via the pandoc sidecar.
+/// (CSL-JSON files are read directly on the JS side; this is only for .bib.)
+#[tauri::command]
+async fn import_bibliography(app: tauri::AppHandle, path: String) -> Result<String, String> {
+    let output = app
+        .shell()
+        .sidecar("pandoc")
+        .map_err(|e| format!("sidecar pandoc indisponível: {}", e))?
+        .args([path.as_str(), "-f", "biblatex", "-t", "csljson"])
+        .output()
+        .await
+        .map_err(|e| format!("falha ao executar pandoc: {}", e))?;
+    if !output.status.success() {
+        return Err(format!(
+            "pandoc (bibliografia) falhou: {}",
+            String::from_utf8_lossy(&output.stderr)
+        ));
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
+/// Convert editor content into a binary document (docx/odt) at `path` via pandoc.
+/// `from` is the source format ("html" for plain docs, "markdown" when the doc
+/// has footnotes so pandoc emits native Word/ODT notes).
 #[tauri::command]
 async fn export_via_pandoc(
     app: tauri::AppHandle,
     path: String,
-    html: String,
+    content: String,
+    from: String,
     to: String,
 ) -> Result<(), String> {
     let stamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis())
         .unwrap_or(0);
-    let tmp = std::env::temp_dir().join(format!("writer-export-{}.html", stamp));
-    fs::write(&tmp, &html).map_err(|e| format!("falha ao gravar temp: {}", e))?;
+    let ext = if from == "markdown" { "md" } else { "html" };
+    let tmp = std::env::temp_dir().join(format!("writer-export-{}.{}", stamp, ext));
+    tokio::fs::write(&tmp, &content)
+        .await
+        .map_err(|e| format!("falha ao gravar temp: {}", e))?;
     let tmp_str = tmp.to_string_lossy().to_string();
 
     let result = app
         .shell()
         .sidecar("pandoc")
         .map_err(|e| format!("sidecar pandoc indisponível: {}", e))?
-        .args([tmp_str.as_str(), "-f", "html", "-t", to.as_str(), "-o", path.as_str()])
+        .args([tmp_str.as_str(), "-f", from.as_str(), "-t", to.as_str(), "-o", path.as_str()])
         .output()
         .await;
 
-    let _ = fs::remove_file(&tmp);
+    let _ = tokio::fs::remove_file(&tmp).await;
 
     let output = result.map_err(|e| format!("falha ao executar pandoc: {}", e))?;
     if !output.status.success() {
@@ -320,14 +349,19 @@ struct FontInfo {
 /// Scan standard system font directories and return unique font family names.
 #[tauri::command]
 async fn list_system_fonts() -> Result<Vec<String>, String> {
-    let dirs = font_search_dirs();
-    let mut names = HashSet::new();
-    for dir in dirs {
-        scan_font_dir(&dir, &mut names);
-    }
-    let mut sorted: Vec<_> = names.into_iter().collect();
-    sorted.sort_by(|a, b| a.to_lowercase().cmp(&b.to_lowercase()));
-    Ok(sorted)
+    // Scanning font directories reads and parses every .ttf/.otf on disk, so
+    // keep it off the async runtime threads.
+    tokio::task::spawn_blocking(|| {
+        let mut names = HashSet::new();
+        for dir in font_search_dirs() {
+            scan_font_dir(&dir, &mut names);
+        }
+        let mut sorted: Vec<_> = names.into_iter().collect();
+        sorted.sort_by(|a, b| a.to_lowercase().cmp(&b.to_lowercase()));
+        sorted
+    })
+    .await
+    .map_err(|e| format!("erro ao listar fontes: {}", e))
 }
 
 /// Read a font file, extract its family name, and return base64 data + name.
@@ -450,22 +484,43 @@ struct VersionInfo {
     has_content: bool,
 }
 
+/// Serializes access to the shared per-document meta file. Version commands do a
+/// read-modify-write on it; without this lock two concurrent saves could each
+/// read the same meta, add their entry, and the later write would drop the
+/// other's. An async mutex because the guard is held across `await`s. Reads
+/// take it too, so a listing never sees a half-written file.
+#[derive(Default)]
+struct VersionStore(tokio::sync::Mutex<()>);
+
 fn versions_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
-    let dir = app
+    // Pure path builder (no I/O). Writers call `ensure_versions_dir` first;
+    // readers tolerate the directory being absent.
+    Ok(app
         .path()
         .app_data_dir()
         .map_err(|e| format!("data dir: {}", e))?
-        .join("versions");
-    fs::create_dir_all(&dir).map_err(|e| format!("criar versions dir: {}", e))?;
-    Ok(dir)
+        .join("versions"))
 }
 
+async fn ensure_versions_dir(app: &tauri::AppHandle) -> Result<(), String> {
+    tokio::fs::create_dir_all(versions_dir(app)?)
+        .await
+        .map_err(|e| format!("criar versions dir: {}", e))
+}
+
+/// Stable filename slug for a document's version store.
+///
+/// FNV-1a, spelled out explicitly: unlike `DefaultHasher` (whose algorithm is
+/// deliberately unspecified and may change between Rust releases), this yields
+/// the same slug forever, so a toolchain upgrade can never orphan a user's
+/// saved version history.
 fn version_slug(doc_path: &str) -> String {
-    use std::hash::{Hash, Hasher};
-    use std::collections::hash_map::DefaultHasher;
-    let mut h = DefaultHasher::new();
-    doc_path.hash(&mut h);
-    format!("v_{:x}", h.finish())
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for byte in doc_path.as_bytes() {
+        hash ^= *byte as u64;
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    format!("v_{:016x}", hash)
 }
 
 fn version_meta_path(app: &tauri::AppHandle, doc_path: &str) -> Result<PathBuf, String> {
@@ -481,26 +536,32 @@ fn version_content_path(
         .join(format!("{}_{}.json", version_slug(doc_path), version_id)))
 }
 
-fn read_meta(app: &tauri::AppHandle, doc_path: &str) -> Result<VersionMeta, String> {
+async fn read_meta(app: &tauri::AppHandle, doc_path: &str) -> Result<VersionMeta, String> {
     let path = version_meta_path(app, doc_path)?;
-    if !path.exists() {
-        return Ok(VersionMeta { doc_path: doc_path.to_string(), versions: Vec::new() });
+    match tokio::fs::read_to_string(&path).await {
+        Ok(raw) => serde_json::from_str(&raw).map_err(|e| format!("parse meta: {}", e)),
+        // First version of this doc — no meta file yet.
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            Ok(VersionMeta { doc_path: doc_path.to_string(), versions: Vec::new() })
+        }
+        Err(e) => Err(format!("ler meta: {}", e)),
     }
-    let raw =
-        fs::read_to_string(&path).map_err(|e| format!("ler meta: {}", e))?;
-    serde_json::from_str(&raw).map_err(|e| format!("parse meta: {}", e))
 }
 
-fn write_meta(app: &tauri::AppHandle, meta: &VersionMeta) -> Result<(), String> {
+async fn write_meta(app: &tauri::AppHandle, meta: &VersionMeta) -> Result<(), String> {
+    ensure_versions_dir(app).await?;
     let path = version_meta_path(app, &meta.doc_path)?;
     let raw = serde_json::to_string_pretty(meta).map_err(|e| format!("serializar meta: {}", e))?;
-    fs::write(&path, raw).map_err(|e| format!("salvar meta: {}", e))
+    tokio::fs::write(&path, raw)
+        .await
+        .map_err(|e| format!("salvar meta: {}", e))
 }
 
 /// Save a named version of the document.
 #[tauri::command]
 async fn save_version(
     app: tauri::AppHandle,
+    store: State<'_, VersionStore>,
     doc_path: String,
     name: String,
     content: String,
@@ -512,19 +573,17 @@ async fn save_version(
     let id = format!("v_{}", ts);
 
     // Save content
+    ensure_versions_dir(&app).await?;
     let cpath = version_content_path(&app, &doc_path, &id)?;
     tokio::fs::write(&cpath, &content)
         .await
         .map_err(|e| format!("salvar versão: {}", e))?;
 
-    // Update meta
-    let mut meta = read_meta(&app, &doc_path)?;
-    meta.versions.push(VersionEntry {
-        id: id.clone(),
-        name,
-        ts,
-    });
-    write_meta(&app, &meta)?;
+    // Update meta under the store lock so concurrent saves don't clobber it.
+    let _guard = store.0.lock().await;
+    let mut meta = read_meta(&app, &doc_path).await?;
+    meta.versions.push(VersionEntry { id, name, ts });
+    write_meta(&app, &meta).await?;
     Ok(())
 }
 
@@ -532,9 +591,11 @@ async fn save_version(
 #[tauri::command]
 async fn list_versions(
     app: tauri::AppHandle,
+    store: State<'_, VersionStore>,
     doc_path: String,
 ) -> Result<Vec<VersionInfo>, String> {
-    let meta = read_meta(&app, &doc_path)?;
+    let _guard = store.0.lock().await;
+    let meta = read_meta(&app, &doc_path).await?;
     let mut out: Vec<VersionInfo> = meta
         .versions
         .into_iter()
@@ -570,16 +631,18 @@ async fn load_version(
 #[tauri::command]
 async fn delete_version(
     app: tauri::AppHandle,
+    store: State<'_, VersionStore>,
     doc_path: String,
     version_id: String,
 ) -> Result<(), String> {
     // Delete content file
     let cpath = version_content_path(&app, &doc_path, &version_id)?;
     let _ = tokio::fs::remove_file(&cpath).await;
-    // Remove from meta
-    let mut meta = read_meta(&app, &doc_path)?;
+    // Remove from meta under the store lock.
+    let _guard = store.0.lock().await;
+    let mut meta = read_meta(&app, &doc_path).await?;
     meta.versions.retain(|v| v.id != version_id);
-    write_meta(&app, &meta)
+    write_meta(&app, &meta).await
 }
 
 /// Report whether llama-server is currently running.
@@ -616,6 +679,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .manage(Mutex::new(LlmState::default()))
+        .manage(VersionStore::default())
         // Intercept the window close: keep the app open and ask the frontend to
         // confirm (it knows which tabs are unsaved). The frontend then calls exit_app.
         .on_window_event(|window, event| {
@@ -630,6 +694,7 @@ pub fn run() {
             write_text_file,
             import_via_pandoc,
             export_via_pandoc,
+            import_bibliography,
             list_models,
             start_llm,
             stop_llm,

@@ -9,6 +9,7 @@ import { Ribbon } from "./editor/Ribbon";
 import { TabStrip } from "./editor/TabStrip";
 import { SearchBar } from "./editor/search/SearchBar";
 import { ChaptersPanel } from "./editor/ChaptersPanel";
+import { ReviewPanel } from "./editor/ReviewPanel";
 import { StatusBar } from "./editor/StatusBar";
 import { AiPanel } from "./ai/AiPanel";
 import { AiBubbleMenu } from "./ai/AiBubbleMenu";
@@ -16,8 +17,10 @@ import { useLocalAi } from "./ai/useLocalAi";
 import { SettingsModal } from "./SettingsModal";
 import { VersionHistory } from "./VersionHistory";
 import { pickImageDataUri } from "./lib/images";
-import { exportToPdf } from "./lib/pdf";
-import { DocTemplate } from "./lib/templates";
+import { PrintOptions } from "./lib/pdf";
+import { PrintPreview } from "./PrintPreview";
+import * as citationStore from "./lib/citationStore";
+import { DocTemplate, applyTemplateContent } from "./lib/templates";
 import {
   DocFile,
   baseName,
@@ -48,22 +51,43 @@ const PAGE_DIMS: Record<string, { width: string; height: string; pxHeight: numbe
   a3: { width: "297mm", height: "420mm", pxHeight: 1587 },
 };
 
-/** Divide content into non-overlapping page segments bounded by manual page breaks. */
-function calcGhostOffsets(scrollHeight: number, pageH: number, breaks: number[]): number[] {
+/**
+ * Page boundaries measured from the real block layout: a new page starts at
+ * the first block that doesn't fit the current one, or right after a manual
+ * page break. Blocks taller than a whole page are sliced at page height
+ * (mid-paragraph, like any word processor). Offsets are Y positions in the
+ * editor's (zoomed) coordinate space where each new page begins.
+ */
+function measurePageOffsets(el: HTMLElement, pageH: number): number[] {
+  const rect = el.getBoundingClientRect();
   const offsets: number[] = [];
-  if (breaks.length === 0) {
-    const pages = Math.ceil(scrollHeight / pageH);
-    for (let i = 1; i < pages; i++) offsets.push(i * pageH);
-    return offsets;
-  }
-  const boundaries = [0, ...breaks, scrollHeight];
-  for (let i = 0; i < boundaries.length - 1; i++) {
-    const start = boundaries[i];
-    const end = boundaries[i + 1];
-    const pagesInSeg = Math.ceil((end - start) / pageH);
-    for (let p = 0; p < pagesInSeg; p++) {
-      const off = start + p * pageH;
-      if (off > 0) offsets.push(off);
+  let pageStart = 0;
+  for (const child of Array.from(el.children) as HTMLElement[]) {
+    const r = child.getBoundingClientRect();
+    const top = r.top - rect.top;
+    const bottom = r.bottom - rect.top;
+
+    if (child.hasAttribute("data-page-break")) {
+      offsets.push(bottom);
+      pageStart = bottom;
+      continue;
+    }
+    if (bottom - pageStart <= pageH) continue;
+
+    // Snap the boundary to the block's start when it fits on the next page.
+    if (top > pageStart && bottom - top <= pageH) {
+      offsets.push(top);
+      pageStart = top;
+      continue;
+    }
+    // Oversized block: slice it at page height.
+    if (top > pageStart) {
+      offsets.push(top);
+      pageStart = top;
+    }
+    while (bottom - pageStart > pageH) {
+      pageStart += pageH;
+      offsets.push(pageStart);
     }
   }
   return offsets;
@@ -79,15 +103,23 @@ function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   const [chaptersOpen, setChaptersOpen] = useState(false);
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [focusMode, setFocusMode] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [showVersionHistory, setShowVersionHistory] = useState(false);
+  const [printJob, setPrintJob] = useState<{ html: string; options: PrintOptions } | null>(null);
   const [systemFonts, setSystemFonts] = useState<string[]>([]);
-  const [ghostOffsets, setGhostOffsets] = useState<number[]>([]);
+  // Each ghost mirrors one printed page: `top` is the content offset where the
+  // page starts, `height` the slice it shows (so the next page's first block
+  // never peeks at the bottom). Both are in unzoomed content px.
+  const [ghostPages, setGhostPages] = useState<{ top: number; height: number }[]>([]);
   const [ghostHtml, setGhostHtml] = useState("");
 
   const pageFormat = settings.pageFormat || "classic";
   const pageMargins = settings.pageMargins || { top: 56, bottom: 56, left: 72, right: 72 };
   const customFonts = settings.customFonts || [];
+  const zoom = settings.zoom || 100;
+  const zoomFactor = zoom / 100;
 
   const dims = PAGE_DIMS[pageFormat] || PAGE_DIMS.classic;
   const isPaginated = pageFormat !== "classic";
@@ -169,51 +201,108 @@ function App() {
     },
   });
 
-  // Recalculate ghost pages
+  // Ghost pages: measure page boundaries (manual breaks + overflow) and mirror
+  // the content into fixed-size ghost pages. Runs on mount/format change and on
+  // content resize, coalesced via rAF — ResizeObserver fires in bursts while
+  // typing and editor.getHTML() serializes the whole doc, so once per frame max.
   useEffect(() => {
     if (!editor || !isPaginated) {
-      setGhostOffsets([]);
+      setGhostPages([]);
       setGhostHtml("");
       return;
     }
     const el = editor.view.dom;
-    const totalH = el.scrollHeight;
-    const pageH = dims.pxHeight;
-    const rect = el.getBoundingClientRect();
-    const positions: number[] = [];
-    el.querySelectorAll<HTMLElement>("[data-page-break]").forEach((b) => {
-      const r = b.getBoundingClientRect();
-      positions.push(r.bottom - rect.top);
-    });
-    positions.sort((a, b) => a - b);
-    const breaks = positions.filter((p, i) => p > 0 && p < totalH && (i === 0 || p > positions[i - 1] + 1));
-    const offsets = calcGhostOffsets(totalH, pageH, breaks);
-    setGhostOffsets(offsets);
-    setGhostHtml(editor.getHTML());
-  }, [editor, pageFormat, dims.pxHeight, isPaginated]);
-
-  // Update ghosts on content change
-  useEffect(() => {
-    if (!editor || !isPaginated) return;
-    const ro = new ResizeObserver(() => {
-      const el = editor.view.dom;
-      const totalH = el.scrollHeight;
-      const pageH = dims.pxHeight;
-      const rect = el.getBoundingClientRect();
-      const positions: number[] = [];
-      el.querySelectorAll<HTMLElement>("[data-page-break]").forEach((b) => {
-        const r = b.getBoundingClientRect();
-        positions.push(r.bottom - rect.top);
-      });
-      positions.sort((a, b) => a - b);
-      const breaks = positions.filter((p, i) => p > 0 && p < totalH && (i === 0 || p > positions[i - 1] + 1));
-      const offsets = calcGhostOffsets(totalH, pageH, breaks);
-      setGhostOffsets(offsets);
+    let raf = 0;
+    const measure = () => {
+      raf = 0;
+      // A page only fits its *printable* height — the page minus its margins,
+      // not the whole sheet. Measuring against the full sheet is what dropped
+      // a margin's worth of content at every page seam.
+      const printableH = dims.pxHeight - pageMargins.top - pageMargins.bottom;
+      // measurePageOffsets works in the zoomed coordinate space of
+      // getBoundingClientRect, so scale the target up; then normalize the
+      // results back to unzoomed px so the ghost transforms match the mm-sized
+      // page frames (which the container's CSS zoom scales uniformly).
+      const offsets = measurePageOffsets(el, printableH * zoomFactor).map((o) => o / zoomFactor);
+      const docH = el.getBoundingClientRect().height / zoomFactor;
+      const pages = offsets.map((top, i) => ({ top, height: (offsets[i + 1] ?? docH) - top }));
+      setGhostPages(pages);
       setGhostHtml(editor.getHTML());
-    });
-    ro.observe(editor.view.dom);
-    return () => ro.disconnect();
-  }, [editor, pageFormat, dims.pxHeight, isPaginated]);
+    };
+    const schedule = () => {
+      if (!raf) raf = requestAnimationFrame(measure);
+    };
+    schedule();
+    const ro = new ResizeObserver(schedule);
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, [editor, pageFormat, dims.pxHeight, isPaginated, zoomFactor, pageMargins.top, pageMargins.bottom]);
+
+  // Spellcheck: drive the WebView's native checker via DOM attributes so it stays
+  // reactive to settings (WebView2 uses system dictionaries; WebKitGTK uses hunspell).
+  useEffect(() => {
+    if (!editor) return;
+    const dom = editor.view.dom as HTMLElement;
+    dom.setAttribute("spellcheck", settings.spellcheck === false ? "false" : "true");
+    dom.setAttribute("lang", settings.docLang || "pt-BR");
+  }, [editor, settings.spellcheck, settings.docLang]);
+
+  // Heading numbering lives in plugin state; keep it in sync with the setting.
+  useEffect(() => {
+    editor?.commands.setHeadingNumbers(settings.numberHeadings === true);
+  }, [editor, settings.numberHeadings]);
+
+  // Same for tracked-changes recording.
+  useEffect(() => {
+    editor?.commands.setTrackChanges(settings.trackChanges === true);
+  }, [editor, settings.trackChanges]);
+
+  // Citations: (re)load the bibliography when its settings change, and again on
+  // window focus (throttled) so edits made in Zotero show up when you return.
+  useEffect(() => {
+    citationStore.configure(settings.bibPath || "", settings.cslStyle || "abnt", settings.customCslPath);
+    let lastLoad = Date.now();
+    const onFocus = () => {
+      if (!settings.bibPath || Date.now() - lastLoad < 10_000) return;
+      lastLoad = Date.now();
+      citationStore.configure(settings.bibPath, settings.cslStyle || "abnt", settings.customCslPath);
+    };
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [settings.bibPath, settings.cslStyle, settings.customCslPath]);
+
+  // Keep the engine's cited-keys registry in doc order (numeric styles like
+  // IEEE derive citation numbers from it). Debounced — typing must stay cheap.
+  useEffect(() => {
+    if (!editor) return;
+    let timer: number | null = null;
+    const collect = () => {
+      timer = null;
+      const keys: string[] = [];
+      editor.state.doc.descendants((node) => {
+        if (node.type.name === "citation") {
+          String(node.attrs.keys ?? "").split(",").filter(Boolean).forEach((k) => keys.push(k));
+        }
+      });
+      citationStore.setCited(keys);
+    };
+    const schedule = () => {
+      if (timer) clearTimeout(timer);
+      timer = window.setTimeout(collect, 400);
+    };
+    collect();
+    editor.on("update", schedule);
+    // Re-collect when the bibliography (re)loads: setCited was a no-op before.
+    const unsubscribe = citationStore.subscribe(schedule);
+    return () => {
+      editor.off("update", schedule);
+      unsubscribe();
+      if (timer) clearTimeout(timer);
+    };
+  }, [editor]);
 
   // Local AI engine, shared by the side panel and the selection bubble menu.
   const ai = useLocalAi(editor, settings, updateSettings);
@@ -359,9 +448,24 @@ function App() {
     if (dataUri) editor.chain().focus().setImage({ src: dataUri }).run();
   }, [editor]);
 
+  // Snapshot the document and settings at click time; the preview modal
+  // paginates that snapshot and prints exactly what it shows.
   const handleExportPdf = useCallback(() => {
     if (!editor) return;
-    exportToPdf(editor.getHTML());
+    const at = tabsRef.current.find((t) => t.id === activeIdRef.current);
+    const s = loadSettings();
+    setPrintJob({
+      html: editor.getHTML(),
+      options: {
+        title: at ? tabTitle(at) : "Documento",
+        pageFormat: s.pageFormat || "a4",
+        margins: s.pageMargins,
+        header: s.pageHeader,
+        footer: s.pageFooter,
+        chromeOnFirst: s.pageChromeOnFirst !== false,
+        numberHeadings: s.numberHeadings === true,
+      },
+    });
   }, [editor]);
 
   // ---- Font import ----
@@ -401,53 +505,45 @@ function App() {
     [updateSettings]
   );
 
+  // ---- Zoom (50–200%) ----
+  const setZoomAbs = useCallback(
+    (z: number) => updateSettings({ zoom: Math.min(200, Math.max(50, Math.round(z))) }),
+    [updateSettings]
+  );
+  // Read the freshest value from storage so keyboard/wheel steps never go stale.
+  const adjustZoom = useCallback(
+    (delta: number) => setZoomAbs((loadSettings().zoom || 100) + delta),
+    [setZoomAbs]
+  );
+
   // ---- Templates ----
   const handleApplyTemplate = useCallback(
     (tmpl: DocTemplate) => {
       updateSettings({
         pageFormat: tmpl.pageFormat,
         pageMargins: tmpl.margins,
+        ...(tmpl.header && { pageHeader: tmpl.header }),
+        ...(tmpl.footer && { pageFooter: tmpl.footer }),
+        ...(tmpl.chromeOnFirst !== undefined && { pageChromeOnFirst: tmpl.chromeOnFirst }),
       });
       if (!editor) return;
-      // Apply content formatting (font, size, line-height, alignment)
-      const { doc } = editor.state;
-      const ops: (() => boolean)[] = [];
-
-      doc.descendants((node, pos) => {
-        if (!node.type.isText && node.content.size === 0) return;
-
-        // Font family + size via textStyle mark
-        const markAttrs: Record<string, string> = {};
-        if (tmpl.fontFamily) markAttrs.fontFamily = tmpl.fontFamily;
-        if (tmpl.fontSize) markAttrs.fontSize = tmpl.fontSize;
-        if (Object.keys(markAttrs).length > 0) {
-          const from = pos;
-          const to = pos + node.nodeSize;
-          ops.push(() =>
-            editor.chain().setTextSelection({ from, to }).setMark("textStyle", markAttrs).run()
-          );
+      // Deferred out of the React event: setContent instantiates NodeViews
+      // (TOC, bibliography) through flushSync, which React rejects mid-render.
+      setTimeout(() => {
+        // Starter content (cover page etc.) only on an empty doc — never wipe work.
+        const { doc } = editor.state;
+        if (tmpl.content && doc.textContent.trim() === "" && doc.childCount <= 1) {
+          editor.commands.setContent(tmpl.content());
+          markDirty();
+          // The starter carries its own alignment (centered cover lines) — apply
+          // the template's font/spacing but keep the blanket textAlign off.
+          applyTemplateContent(editor, { ...tmpl, textAlign: undefined });
+        } else {
+          applyTemplateContent(editor, tmpl);
         }
-
-        // Line height via node attribute
-        if (tmpl.lineHeight && (node.type.name === "paragraph" || node.type.name === "heading")) {
-          ops.push(() =>
-            editor.chain().setTextSelection({ from: pos, to: pos + node.nodeSize })
-              .updateAttributes(node.type.name, { lineHeight: tmpl.lineHeight }).run()
-          );
-        }
-
-        // Text alignment
-        if (tmpl.textAlign && (node.type.name === "paragraph" || node.type.name === "heading")) {
-          ops.push(() =>
-            editor.chain().setTextSelection({ from: pos, to: pos + node.nodeSize })
-              .setTextAlign(tmpl.textAlign!).run()
-          );
-        }
-      });
-
-      ops.forEach((fn) => fn());
+      }, 0);
     },
-    [editor, updateSettings]
+    [editor, updateSettings, markDirty]
   );
 
   // ---- Versioning ----
@@ -546,7 +642,8 @@ function App() {
       doAutosave();
       return;
     }
-    const delay = at.format === "docx" || at.format === "odt" ? 4000 : 2000;
+    // pandoc-converted formats are heavier to write; give them a longer pause.
+    const delay = at.format === "markdown" || at.format === "html" ? 2000 : 4000;
     autosaveTimer.current = window.setTimeout(doAutosave, delay);
   }, [doAutosave]);
 
@@ -595,6 +692,12 @@ function App() {
   // ---- Keyboard shortcuts ----
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (e.key === "F11") {
+        e.preventDefault();
+        setFocusMode((v) => !v);
+        return;
+      }
+      if (e.key === "Escape") setFocusMode(false);
       if (!(e.ctrlKey || e.metaKey)) return;
       const k = e.key.toLowerCase();
       if (k === "s" && e.shiftKey) {
@@ -609,17 +712,40 @@ function App() {
       } else if (k === "n" || k === "t") {
         e.preventDefault();
         newBlankTab();
-      } else if (k === "f") {
+      } else if (k === "f" && !e.altKey) {
         e.preventDefault();
         setShowSearch(true);
       } else if (k === "w") {
         e.preventDefault();
         closeTab(activeIdRef.current);
+      } else if (k === "=" || k === "+") {
+        e.preventDefault();
+        adjustZoom(10);
+      } else if (k === "-" || k === "_") {
+        e.preventDefault();
+        adjustZoom(-10);
+      } else if (k === "0") {
+        e.preventDefault();
+        setZoomAbs(100);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [handleSave, handleSaveAs, handleOpen, newBlankTab, closeTab]);
+  }, [handleSave, handleSaveAs, handleOpen, newBlankTab, closeTab, adjustZoom, setZoomAbs]);
+
+  // ---- Ctrl+scroll to zoom (native listener so preventDefault isn't passive) ----
+  const scrollRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey) return;
+      e.preventDefault();
+      adjustZoom(e.deltaY < 0 ? 10 : -10);
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [adjustZoom]);
 
   const pageStyle = useMemo(() => {
     const style: Record<string, string> = {
@@ -635,10 +761,16 @@ function App() {
   const activeTab = tabs.find((t) => t.id === activeId);
 
   return (
-    <div className="app">
+    <div className={"app" + (focusMode ? " focus-mode" : "")}>
+      {focusMode && (
+        <button className="focus-exit" onClick={() => setFocusMode(false)} title="Sair do modo foco (Esc ou F11)">
+          ✕ foco
+        </button>
+      )}
       <MenuBar
         aiOpen={aiOpen}
         chaptersOpen={chaptersOpen}
+        reviewOpen={reviewOpen}
         recents={recents}
         onNew={newBlankTab}
         onOpen={handleOpen}
@@ -647,6 +779,7 @@ function App() {
         onExportPdf={handleExportPdf}
         onToggleAi={() => setAiOpen((v) => !v)}
         onToggleChapters={() => setChaptersOpen((v) => !v)}
+        onToggleReview={() => setReviewOpen((v) => !v)}
         onOpenRecent={handleOpenRecent}
         onOpenSettings={() => setShowSettings(true)}
         onVersionHistory={() => setShowVersionHistory((v) => !v)}
@@ -664,31 +797,62 @@ function App() {
           customFonts={customFonts}
           onImportFont={handleImportFont}
           onApplyTemplate={handleApplyTemplate}
+          numberHeadings={settings.numberHeadings === true}
+          onToggleHeadingNumbers={() => updateSettings({ numberHeadings: !settings.numberHeadings })}
         />
       )}
       {editor && <AiBubbleMenu editor={editor} ai={ai} onOpenPanel={() => setAiOpen(true)} />}
       <div className="workspace">
         {chaptersOpen && editor && <ChaptersPanel editor={editor} onClose={() => setChaptersOpen(false)} />}
+        {reviewOpen && editor && (
+          <ReviewPanel
+            editor={editor}
+            trackChanges={settings.trackChanges === true}
+            onToggleTrackChanges={() => updateSettings({ trackChanges: !settings.trackChanges })}
+            authorName={settings.authorName || "Autor"}
+            onClose={() => setReviewOpen(false)}
+          />
+        )}
         <div className="editor-main">
-          <div className="editor-scroll">
+          <div className="editor-scroll" ref={scrollRef}>
             {showSearch && editor && <SearchBar editor={editor} onClose={() => setShowSearch(false)} />}
-            <div className={`pages-container${isPaginated ? " paginated" : ""}`}>
+            <div className={`pages-container${isPaginated ? " paginated" : ""}`} style={{ zoom: zoomFactor }}>
               <div className={`page${isPaginated ? " fixed" : ""}`} style={pageStyle}>
-                <EditorContent editor={editor} />
+                {isPaginated ? (
+                  <div className="page-clip">
+                    <EditorContent editor={editor} />
+                  </div>
+                ) : (
+                  <EditorContent editor={editor} />
+                )}
               </div>
               {isPaginated &&
-                ghostOffsets.map((offset, i) => (
-                  <div key={i} className="page fixed" style={{ width: dims.width, height: dims.height }}>
-                    <div
-                      className="page-ghost ProseMirror"
-                      style={{ transform: `translateY(-${offset}px)` }}
-                      dangerouslySetInnerHTML={{ __html: ghostHtml }}
-                    />
+                ghostPages.map((pg, i) => (
+                  // Same padding/width as the editable page (via pageStyle) so the
+                  // mirror reflows identically — otherwise offsets don't line up.
+                  <div key={i} className="page fixed" style={pageStyle}>
+                    <div className="page-clip" style={{ height: pg.height }}>
+                      <div
+                        className="page-ghost ProseMirror"
+                        style={{ transform: `translateY(-${pg.top}px)` }}
+                        dangerouslySetInnerHTML={{ __html: ghostHtml }}
+                      />
+                    </div>
                   </div>
                 ))}
             </div>
           </div>
-          {editor && <StatusBar editor={editor} pageFormat={pageFormat} />}
+          {editor && (
+            <StatusBar
+              editor={editor}
+              pageFormat={pageFormat}
+              zoom={zoom}
+              zoomFactor={zoomFactor}
+              onZoomChange={setZoomAbs}
+              measuredPages={isPaginated ? ghostPages.length + 1 : undefined}
+              wordGoal={settings.wordGoal || 0}
+            />
+          )}
         </div>
         {aiOpen && <AiPanel editor={editor} ai={ai} onClose={() => setAiOpen(false)} />}
       </div>
@@ -702,6 +866,9 @@ function App() {
           onSaveVersion={handleSaveVersion}
           onRestoreVersion={handleRestoreVersion}
         />
+      )}
+      {printJob && (
+        <PrintPreview html={printJob.html} options={printJob.options} onClose={() => setPrintJob(null)} />
       )}
     </div>
   );

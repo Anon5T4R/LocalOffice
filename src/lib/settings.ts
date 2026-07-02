@@ -15,6 +15,18 @@ export interface CustomFont {
   path: string;
 }
 
+/**
+ * One line of page chrome (header or footer) for print/PDF. Each slot accepts
+ * free text plus the placeholders {page}, {pages}, {title} and {date}.
+ */
+export interface HeaderFooterSpec {
+  left: string;
+  center: string;
+  right: string;
+}
+
+export const EMPTY_HEADER_FOOTER: HeaderFooterSpec = { left: "", center: "", right: "" };
+
 export interface Settings {
   theme: Theme;
   modelsDir: string;
@@ -24,6 +36,27 @@ export interface Settings {
   pageFormat: PageFormat;
   pageMargins: PageMargins;
   customFonts: CustomFont[];
+  spellcheck: boolean;
+  docLang: string;
+  zoom: number;
+  pageHeader: HeaderFooterSpec;
+  pageFooter: HeaderFooterSpec;
+  /** Print header/footer on the first page too (off for cover pages). */
+  pageChromeOnFirst: boolean;
+  /** Automatic heading numbering (1, 1.1, 1.1.1…) in editor and print. */
+  numberHeadings: boolean;
+  /** Bibliography file (.bib from Zotero/Better BibTeX, or CSL-JSON). */
+  bibPath: string;
+  /** Citation style: bundled id ("abnt", "apa", "chicago", "ieee") or "custom". */
+  cslStyle: string;
+  /** Path to a user-provided .csl file (used when cslStyle === "custom"). */
+  customCslPath: string;
+  /** Name recorded on comments and tracked changes. */
+  authorName: string;
+  /** Whether edits are being recorded as tracked changes. */
+  trackChanges: boolean;
+  /** Word-count goal shown in the status bar (0 = off). */
+  wordGoal: number;
 }
 
 const DEFAULT_MARGINS: PageMargins = { top: 56, bottom: 56, left: 72, right: 72 };
@@ -37,6 +70,19 @@ const DEFAULTS: Settings = {
   pageFormat: "classic",
   pageMargins: { ...DEFAULT_MARGINS },
   customFonts: [],
+  spellcheck: true,
+  docLang: "pt-BR",
+  zoom: 100,
+  pageHeader: { ...EMPTY_HEADER_FOOTER },
+  pageFooter: { ...EMPTY_HEADER_FOOTER, center: "{page}" },
+  pageChromeOnFirst: true,
+  numberHeadings: false,
+  bibPath: "",
+  cslStyle: "abnt",
+  customCslPath: "",
+  authorName: "Autor",
+  trackChanges: false,
+  wordGoal: 0,
 };
 
 const SETTINGS_KEY = "localoffice.settings";

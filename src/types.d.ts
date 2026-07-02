@@ -5,3 +5,33 @@ declare module "turndown-plugin-gfm" {
   export const strikethrough: TurndownService.Plugin;
   export const taskListItems: TurndownService.Plugin;
 }
+
+declare module "citeproc" {
+  /** citeproc-js: CSL engine. Loosely typed — we wrap it in lib/citations.ts. */
+  const CSL: {
+    Engine: new (
+      sys: {
+        retrieveLocale: (lang: string) => string | undefined;
+        retrieveItem: (id: string) => unknown;
+      },
+      styleXml: string,
+      locale?: string
+    ) => {
+      updateItems(ids: string[]): void;
+      makeCitationCluster(cites: unknown[]): string;
+      makeBibliography(): [unknown, string[]] | false;
+    };
+  };
+  export default CSL;
+}
+
+declare module "pagedjs" {
+  /** CSS Paged Media polyfill. Renders `content` into real page boxes inside `renderTo`. */
+  export class Previewer {
+    preview(
+      content: Node | string,
+      stylesheets: string[],
+      renderTo: HTMLElement
+    ): Promise<{ total: number }>;
+  }
+}

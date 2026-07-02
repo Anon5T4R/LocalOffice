@@ -1,7 +1,36 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import type { Mark } from "@tiptap/pm/model";
 import { Editor, useEditorState } from "@tiptap/react";
 import { PageFormat, PageMargins, CustomFont } from "../lib/settings";
 import { TEMPLATES, DocTemplate } from "../lib/templates";
+
+/** Rewrite the case of the current selection's text, preserving each run's marks. */
+function transformCase(editor: Editor, fn: (s: string) => string): void {
+  const { state } = editor;
+  const { from, to, empty } = state.selection;
+  if (empty) return;
+  const { tr, schema, doc } = state;
+  const jobs: { start: number; end: number; text: ReturnType<typeof schema.text> }[] = [];
+  doc.nodesBetween(from, to, (node, pos) => {
+    if (!node.isText || node.text == null) return;
+    const start = Math.max(pos, from);
+    const end = Math.min(pos + node.text.length, to);
+    if (start >= end) return;
+    const slice = node.text.slice(start - pos, end - pos);
+    const next = fn(slice);
+    if (next !== slice) jobs.push({ start, end, text: schema.text(next, node.marks) });
+  });
+  // Apply back-to-front so earlier positions stay valid.
+  for (let i = jobs.length - 1; i >= 0; i--) tr.replaceWith(jobs[i].start, jobs[i].end, jobs[i].text);
+  if (tr.docChanged) editor.view.dispatch(tr);
+  editor.commands.focus();
+}
+
+const CASE_FNS: Record<string, (s: string) => string> = {
+  upper: (s) => s.toLocaleUpperCase(),
+  lower: (s) => s.toLocaleLowerCase(),
+  title: (s) => s.toLocaleLowerCase().replace(/(^|\s|[-–—])(\S)/g, (_, sep, c) => sep + c.toLocaleUpperCase()),
+};
 
 interface RibbonProps {
   editor: Editor;
@@ -14,6 +43,8 @@ interface RibbonProps {
   customFonts: CustomFont[];
   onImportFont: () => void;
   onApplyTemplate: (tmpl: DocTemplate) => void;
+  numberHeadings: boolean;
+  onToggleHeadingNumbers: () => void;
 }
 
 function Btn({
@@ -74,8 +105,32 @@ export function Ribbon({
   customFonts,
   onImportFont,
   onApplyTemplate,
+  numberHeadings,
+  onToggleHeadingNumbers,
 }: RibbonProps) {
   const [tab, setTab] = useState<"inicio" | "inserir" | "layout">("inicio");
+  const [painterMarks, setPainterMarks] = useState<readonly Mark[] | null>(null);
+
+  // Format painter: after capturing marks, the next non-empty selection gets them.
+  useEffect(() => {
+    if (!painterMarks) return;
+    const apply = () => {
+      const sel = editor.state.selection;
+      if (sel.empty) return;
+      const chain = editor.chain().focus().unsetAllMarks();
+      painterMarks.forEach((m) => chain.setMark(m.type.name, m.attrs));
+      chain.run();
+      setPainterMarks(null);
+    };
+    editor.on("selectionUpdate", apply);
+    return () => { editor.off("selectionUpdate", apply); };
+  }, [editor, painterMarks]);
+
+  const copyFormat = () => {
+    const sel = editor.state.selection;
+    const marks = sel.empty ? sel.$from.marks() : sel.$from.marksAcross(sel.$to) ?? sel.$from.marks();
+    setPainterMarks(marks);
+  };
 
   const s = useEditorState({
     editor,
@@ -84,6 +139,8 @@ export function Ribbon({
       italic: editor.isActive("italic"),
       underline: editor.isActive("underline"),
       strike: editor.isActive("strike"),
+      subscript: editor.isActive("subscript"),
+      superscript: editor.isActive("superscript"),
       code: editor.isActive("code"),
       h1: editor.isActive("heading", { level: 1 }),
       h2: editor.isActive("heading", { level: 2 }),
@@ -104,6 +161,9 @@ export function Ribbon({
       lineHeight:
         editor.getAttributes("paragraph").lineHeight ||
         editor.getAttributes("heading").lineHeight || "",
+      textIndent:
+        editor.getAttributes("paragraph").textIndent ||
+        editor.getAttributes("heading").textIndent || "",
       alignLeft: editor.isActive({ textAlign: "left" }),
       alignCenter: editor.isActive({ textAlign: "center" }),
       alignRight: editor.isActive({ textAlign: "right" }),
@@ -215,6 +275,8 @@ export function Ribbon({
             <Btn onClick={() => chain().toggleItalic().run()} active={s.italic} title="Itálico (Ctrl+I)"><i>I</i></Btn>
             <Btn onClick={() => chain().toggleUnderline().run()} active={s.underline} title="Sublinhado (Ctrl+U)"><u>U</u></Btn>
             <Btn onClick={() => chain().toggleStrike().run()} active={s.strike} title="Riscado"><s>S</s></Btn>
+            <Btn onClick={() => chain().toggleSuperscript().run()} active={s.superscript} title="Sobrescrito (Ctrl+.)">x<sup>2</sup></Btn>
+            <Btn onClick={() => chain().toggleSubscript().run()} active={s.subscript} title="Subscrito (Ctrl+,)">x<sub>2</sub></Btn>
             <Btn onClick={() => chain().toggleCode().run()} active={s.code} title="Código inline">{"</>"}</Btn>
           </div>
           <div className="tb-sep" />
@@ -260,6 +322,8 @@ export function Ribbon({
             <Btn onClick={() => chain().setTextAlign("center").run()} active={s.alignCenter} title="Centralizar">⬌</Btn>
             <Btn onClick={() => chain().setTextAlign("right").run()} active={s.alignRight} title="Alinhar à direita">➡</Btn>
             <Btn onClick={() => chain().setTextAlign("justify").run()} active={s.alignJustify} title="Justificar">☰</Btn>
+            <Btn onClick={() => chain().changeIndent(-1).run()} title="Diminuir recuo (Ctrl+[)">⇤</Btn>
+            <Btn onClick={() => chain().changeIndent(1).run()} title="Aumentar recuo (Ctrl+]) — 4cm = citação longa ABNT">⇥</Btn>
           </div>
           <div className="tb-sep" />
 
@@ -272,6 +336,22 @@ export function Ribbon({
           <div className="tb-sep" />
 
           <div className="tb-group">
+            <select
+              className="tb-btn tb-select"
+              value=""
+              onChange={(e) => {
+                const fn = CASE_FNS[e.target.value];
+                if (fn) transformCase(editor, fn);
+                e.target.value = "";
+              }}
+              title="Alterar maiúsculas/minúsculas da seleção"
+            >
+              <option value="">Aa ▾</option>
+              <option value="upper">MAIÚSCULAS</option>
+              <option value="lower">minúsculas</option>
+              <option value="title">Iniciais Maiúsculas</option>
+            </select>
+            <Btn onClick={copyFormat} active={!!painterMarks} title="Pincel de formatação (copie o formato e selecione o destino)">🖌</Btn>
             <Btn onClick={() => chain().unsetAllMarks().clearNodes().run()} title="Limpar formatação">⌫ Limpar</Btn>
           </div>
         </div>
@@ -300,6 +380,10 @@ export function Ribbon({
             <Btn onClick={setLink} active={s.link} title="Inserir/editar link" wide>🔗 Link</Btn>
             <Btn onClick={() => chain().setHorizontalRule().run()} title="Linha divisória" wide>— Linha</Btn>
             <Btn onClick={() => chain().setPageBreak().run()} title="Quebra de página (nova página no PDF)" wide>⤓ Quebra</Btn>
+            <Btn onClick={() => chain().addFootnote().run()} title="Nota de rodapé (Ctrl+Alt+F)" wide>⁺ Nota</Btn>
+            <Btn onClick={() => chain().insertTableOfContents().run()} title="Sumário (índice dos títulos, com páginas no PDF)" wide>☰ Sumário</Btn>
+            <Btn onClick={() => chain().insertContent("[@").run()} title='Citação bibliográfica (ou digite "[@")' wide>❞ Citação</Btn>
+            <Btn onClick={() => chain().insertBibliography().run()} title="Lista de referências das obras citadas" wide>📚 Refs</Btn>
             <Btn onClick={() => chain().toggleCodeBlock().run()} active={s.codeBlock} title="Bloco de código" wide>{"{ } Código"}</Btn>
           </div>
         </div>
@@ -403,6 +487,32 @@ export function Ribbon({
               <option value="4">4px</option>
             </select>
             <Btn onClick={() => chain().unsetLetterSpacing().run()} title="Espaçamento padrão" disabled={!s.letterSpacing}>↺</Btn>
+          </div>
+          <div className="tb-sep" />
+
+          <div className="tb-group">
+            <select
+              className="tb-btn tb-select"
+              value={s.textIndent}
+              onChange={(e) => chain().setTextIndent(e.target.value || null).run()}
+              title="Recuo da primeira linha do parágrafo"
+            >
+              <option value="">Recuo 1ª linha</option>
+              <option value="1.25cm">1,25 cm (ABNT)</option>
+              <option value="2cm">2 cm</option>
+            </select>
+          </div>
+          <div className="tb-sep" />
+
+          <div className="tb-group">
+            <Btn
+              onClick={onToggleHeadingNumbers}
+              active={numberHeadings}
+              title="Numerar títulos automaticamente (1, 1.1, 1.1.1…)"
+              wide
+            >
+              1.2.3 Títulos
+            </Btn>
           </div>
         </div>
       )}

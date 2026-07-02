@@ -443,6 +443,46 @@ body {
   flex: 1;
 }
 
+.status-goal.is-done {
+  color: #16a34a;
+}
+
+.status-zoom {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.status-zoom-btn,
+.status-zoom-val {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+
+.status-zoom-btn {
+  width: 20px;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.status-zoom-val {
+  min-width: 40px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.status-zoom-btn:hover,
+.status-zoom-val:hover {
+  background: var(--hover, rgba(127, 127, 127, 0.15));
+  color: var(--text);
+}
+
 .status-bar .tb-btn {
   height: 24px;
   font-size: 12px;
@@ -473,7 +513,457 @@ body {
   overflow-y: auto;
 }
 
-/* ---- Print / PDF export ---- */
+/* ---- Footnotes ---- */
+/* In the editor, numbers are pure CSS counters: refs count in body order,
+   notes count in the section, and the maintenance plugin keeps both in the
+   same order. Counters are scoped to .ProseMirror because printed content
+   gets literal baked numbers instead (paged.js fragmentation breaks counters)
+   and must not be double-numbered. */
+.footnote-ref {
+  cursor: pointer;
+  color: var(--accent, #2563eb);
+  font-weight: 600;
+  padding: 0 1px;
+}
+
+.ProseMirror {
+  counter-reset: footnote-ref footnote-note;
+}
+
+.ProseMirror .footnote-ref::after {
+  counter-increment: footnote-ref;
+  content: counter(footnote-ref);
+}
+
+.footnotes {
+  display: block;
+  margin-top: 2em;
+  padding-top: 0.6em;
+  border-top: 1px solid var(--border);
+  font-size: 0.85em;
+  color: var(--muted);
+}
+
+.ProseMirror .footnote-item {
+  display: flex;
+  gap: 0.5em;
+  margin: 0.15em 0;
+}
+
+.ProseMirror .footnote-item::before {
+  counter-increment: footnote-note;
+  content: counter(footnote-note) ".";
+  flex: 0 0 auto;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.footnote-item > p {
+  margin: 0;
+}
+
+/* ---- Chapters: drag-and-drop reorder ---- */
+.chapter-item.dragging {
+  opacity: 0.4;
+}
+
+.chapter-item.drag-over {
+  box-shadow: inset 0 2px 0 var(--accent, #2563eb);
+}
+
+.chapter-drop-end {
+  margin-top: 6px;
+  padding: 6px 8px;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+.chapter-drop-end.drag-over {
+  border-color: var(--accent, #2563eb);
+  color: var(--text);
+}
+
+/* ---- Heading numbers (widget decorations) ---- */
+.heading-num {
+  color: var(--muted);
+  user-select: none;
+}
+
+/* ---- Table of contents block (editor NodeView) ---- */
+.toc-block {
+  margin: 12px 0;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+}
+
+.toc-block .toc-header {
+  font-weight: 700;
+  font-size: 1.1em;
+  margin-bottom: 6px;
+}
+
+.toc-block .toc-empty,
+.toc-block .toc-hint {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.toc-block .toc-hint {
+  margin-top: 8px;
+}
+
+.toc-block .toc-entry {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: none;
+  color: var(--text);
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+  font-size: 0.95em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.toc-block .toc-entry:hover {
+  background: var(--hover, rgba(127, 127, 127, 0.12));
+}
+
+.toc-block .toc-entry.lvl-2 { padding-left: 20px; }
+.toc-block .toc-entry.lvl-3 { padding-left: 36px; }
+.toc-block .toc-entry.lvl-4,
+.toc-block .toc-entry.lvl-5,
+.toc-block .toc-entry.lvl-6 { padding-left: 52px; }
+
+/* ---- Resizable image NodeView ---- */
+.image-block {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+  line-height: 0;
+}
+
+.image-block img {
+  max-width: 100%;
+  height: auto;
+}
+
+.image-block.align-left { float: left; margin: 4px 16px 8px 0; }
+.image-block.align-right { float: right; margin: 4px 0 8px 16px; }
+.image-block.align-center { display: block; margin: 8px auto; text-align: center; }
+
+.ProseMirror-selectednode.image-block img,
+.image-block.ProseMirror-selectednode img {
+  outline: 2px solid var(--accent, #2563eb);
+  outline-offset: 1px;
+}
+
+.image-toolbar {
+  position: absolute;
+  top: -34px;
+  left: 0;
+  display: flex;
+  gap: 2px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 2px;
+  line-height: normal;
+  z-index: 5;
+}
+
+.image-toolbar button {
+  border: none;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 3px 7px;
+  border-radius: 4px;
+}
+
+.image-toolbar button:hover,
+.image-toolbar button.is-active {
+  background: var(--hover, rgba(127, 127, 127, 0.15));
+}
+
+.image-resize-handle {
+  position: absolute;
+  right: -6px;
+  bottom: -6px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--accent, #2563eb);
+  border: 2px solid var(--panel);
+  cursor: nwse-resize;
+  z-index: 5;
+}
+
+/* ---- Focus mode (F11) ---- */
+.app.focus-mode .menubar,
+.app.focus-mode .tab-strip,
+.app.focus-mode .ribbon,
+.app.focus-mode .status-bar,
+.app.focus-mode .chapters-panel,
+.app.focus-mode .ai-panel {
+  display: none !important;
+}
+
+.focus-exit {
+  position: fixed;
+  top: 10px;
+  right: 14px;
+  z-index: 50;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  opacity: 0.35;
+  transition: opacity 0.15s;
+}
+
+.focus-exit:hover {
+  opacity: 1;
+}
+
+/* ---- Review: comments & tracked changes ---- */
+.comment-anchor {
+  background: rgba(250, 204, 21, 0.25);
+  border-bottom: 2px solid rgba(202, 138, 4, 0.6);
+  cursor: pointer;
+}
+
+.comment-anchor.is-resolved {
+  background: none;
+  border-bottom: 1px dotted var(--border);
+}
+
+.track-ins {
+  color: #16a34a;
+  text-decoration: underline;
+  text-decoration-color: rgba(22, 163, 74, 0.5);
+}
+
+.track-del {
+  color: #dc2626;
+  text-decoration: line-through;
+  text-decoration-color: rgba(220, 38, 38, 0.6);
+}
+
+.review-panel {
+  overflow-y: auto;
+}
+
+.review-track-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  font-size: 13px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+}
+
+.review-section {
+  padding: 8px 12px;
+}
+
+.review-section-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+.review-new-comment {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+
+.review-new-comment textarea {
+  resize: vertical;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font: inherit;
+  font-size: 13px;
+}
+
+.review-card {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px;
+  margin-bottom: 8px;
+  background: var(--bg);
+}
+
+.review-card.is-resolved {
+  opacity: 0.55;
+}
+
+.review-excerpt {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 0 0 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.review-body {
+  font-size: 13px;
+  margin-bottom: 4px;
+  white-space: pre-wrap;
+}
+
+.review-meta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.review-meta .tb-btn {
+  height: 22px;
+  font-size: 11px;
+  padding: 0 6px;
+}
+
+/* ---- Citations & bibliography ---- */
+.citation {
+  background: var(--hover, rgba(37, 99, 235, 0.1));
+  border-radius: 4px;
+  padding: 0 3px;
+  cursor: default;
+}
+
+.citation-missing {
+  background: rgba(239, 68, 68, 0.12);
+  color: #ef4444;
+}
+
+.bibliography-block {
+  margin: 12px 0;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+}
+
+.bibliography-header {
+  font-weight: 700;
+  font-size: 1.1em;
+  margin-bottom: 8px;
+}
+
+.bibliography-empty {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.bibliography-block .csl-entry {
+  margin: 0.5em 0;
+  font-size: 0.95em;
+}
+
+.bib-status {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.bib-status.bib-error {
+  color: #ef4444;
+}
+
+/* Header/footer settings: three aligned slots (left / center / right). */
+.hf-row {
+  display: flex;
+  gap: 6px;
+}
+
+.hf-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ---- Print preview (paged.js) ---- */
+.print-preview {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: var(--bg);
+  overflow-y: auto;
+}
+
+.print-preview-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 14px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+
+.print-preview-info {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.print-preview-error {
+  margin: 24px auto;
+  max-width: 520px;
+  text-align: center;
+  color: var(--muted);
+}
+
+.print-preview-pages {
+  padding: 24px 0 48px;
+}
+
+.print-preview-pages .pagedjs_pages {
+  margin: 0 auto;
+  width: fit-content;
+}
+
+.print-preview-pages .pagedjs_page {
+  background: #fff;
+  margin: 0 auto 20px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
+}
+
+/* ---- Print / PDF export ----
+   The @page rule (size/margin) is injected dynamically: paged.js generates its
+   own for the preview path, and printLegacy() injects one for the fallback. */
 #print-root {
   display: none;
 }
@@ -482,44 +972,58 @@ body {
   .app {
     display: none !important;
   }
+
+  /* Legacy fallback: the browser paginates #print-root content itself.
+     margin:0 (in the injected @page) hides the browser's own header/footer;
+     the visual margins live in the content padding. */
   #print-root {
     display: block !important;
   }
-  /* margin:0 leaves no room for the browser's own header/footer (date, title,
-     page number, URL), so they don't print. Page margins move into the content
-     padding below. */
-  @page {
-    size: A4;
-    margin: 0;
-  }
-  .print-content {
+  #print-root .print-content {
     font-size: 12pt;
     line-height: 1.5;
     color: #000;
     padding: 18mm 16mm;
   }
-  .print-content img {
+  #print-root .print-content img {
     max-width: 100%;
   }
-  .print-content table {
+  #print-root .print-content table {
     border-collapse: collapse;
     width: 100%;
   }
-  .print-content th,
-  .print-content td {
+  #print-root .print-content th,
+  #print-root .print-content td {
     border: 1px solid #999;
     padding: 4px 8px;
   }
-  /* Manual page breaks become real page breaks; their visual marker is hidden. */
-  .print-content [data-page-break] {
+  #print-root .print-content [data-page-break] {
     break-after: page;
     page-break-after: always;
     border: none;
     height: 0;
     margin: 0;
   }
-  .print-content .page-break-label {
+  #print-root .print-content .page-break-label {
     display: none;
+  }
+
+  /* Paged.js preview: print only the page boxes, without the modal chrome. */
+  .print-preview {
+    position: static !important;
+    overflow: visible !important;
+    background: none !important;
+  }
+  .print-preview-toolbar,
+  .print-preview-error {
+    display: none !important;
+  }
+  .print-preview-pages {
+    padding: 0 !important;
+  }
+  .print-preview-pages .pagedjs_page {
+    margin: 0 !important;
+    box-shadow: none !important;
   }
 }
 
@@ -545,6 +1049,15 @@ body {
 
 .page.fixed + .page.fixed {
   margin-top: 0;
+}
+
+/* Clips content to the printable area (inside the margins). On the editable
+   page it doubles as the scroll viewport so the caret follows within the page;
+   on ghosts an inline height limits it to the slice that page shows. */
+.page-clip {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
 }
 
 .page-ghost {

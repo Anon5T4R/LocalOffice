@@ -10,21 +10,53 @@ const PAGE_HEIGHT_PX: Record<string, number> = {
   a3: 1587,
 };
 
-export function StatusBar({ editor, pageFormat = "classic" }: { editor: Editor; pageFormat?: PageFormat }) {
-  const { words, breaks } = useEditorState({
+const WORDS_PER_MINUTE = 200;
+
+function countWords(text: string): number {
+  const t = text.trim();
+  return t ? t.split(/\s+/).length : 0;
+}
+
+interface StatusBarProps {
+  editor: Editor;
+  pageFormat?: PageFormat;
+  zoom: number;
+  zoomFactor: number;
+  onZoomChange: (z: number) => void;
+  /** Exact count from the measured ghost pages; when absent we estimate. */
+  measuredPages?: number;
+  /** Word-count goal (0/undefined = off). */
+  wordGoal?: number;
+}
+
+export function StatusBar({ editor, pageFormat = "classic", zoom, zoomFactor, onZoomChange, measuredPages, wordGoal }: StatusBarProps) {
+  const { words, chars, charsNoSpaces, paragraphs, breaks, selWords, selChars } = useEditorState({
     editor,
     selector: ({ editor }) => {
-      const text = editor.getText().trim();
+      const text = editor.getText();
       let breaks = 0;
+      let paragraphs = 0;
       editor.state.doc.descendants((n) => {
         if (n.type.name === "pageBreak") breaks += 1;
+        if ((n.type.name === "paragraph" || n.type.name === "heading") && n.textContent.trim()) paragraphs += 1;
       });
-      return { words: text ? text.split(/\s+/).length : 0, breaks };
+      const { from, to, empty } = editor.state.selection;
+      const selText = empty ? "" : editor.state.doc.textBetween(from, to, " ");
+      return {
+        words: countWords(text),
+        chars: text.replace(/\n/g, "").length,
+        charsNoSpaces: text.replace(/\s/g, "").length,
+        paragraphs,
+        breaks,
+        selWords: countWords(selText),
+        selChars: selText.replace(/\n/g, "").length,
+      };
     },
   })!;
 
   const [heightPages, setHeightPages] = useState(1);
-  const pagePx = PAGE_HEIGHT_PX[pageFormat] || 980;
+  // scrollHeight scales with the ancestor CSS zoom; scale the page height to match.
+  const pagePx = (PAGE_HEIGHT_PX[pageFormat] || 980) * zoomFactor;
 
   useEffect(() => {
     const el = editor.view.dom as HTMLElement;
@@ -35,12 +67,35 @@ export function StatusBar({ editor, pageFormat = "classic" }: { editor: Editor; 
     return () => ro.disconnect();
   }, [editor, pagePx]);
 
-  const pages = Math.max(heightPages, breaks + 1);
+  const pages = measuredPages ?? Math.max(heightPages, breaks + 1);
+  const readMin = Math.max(1, Math.round(words / WORDS_PER_MINUTE));
 
   return (
     <div className="status-bar">
-      <span title="Estimativa baseada na altura do conteúdo">~{pages} página{pages > 1 ? "s" : ""}</span>
-      <span>{words} palavra{words === 1 ? "" : "s"}</span>
+      <span title={measuredPages ? "Contagem medida pelo layout das páginas" : "Estimativa baseada na altura do conteúdo"}>
+        {measuredPages ? "" : "~"}{pages} página{pages > 1 ? "s" : ""}
+      </span>
+      {selWords > 0 ? (
+        <span title="Seleção">{selWords} de {words} palavra{words === 1 ? "" : "s"} · {selChars} caractere{selChars === 1 ? "" : "s"}</span>
+      ) : (
+        <span title={`${charsNoSpaces} caracteres sem espaços · ${paragraphs} parágrafo${paragraphs === 1 ? "" : "s"}`}>
+          {words} palavra{words === 1 ? "" : "s"} · {chars} caractere{chars === 1 ? "" : "s"}
+        </span>
+      )}
+      <span title="Tempo de leitura estimado (~200 palavras/min)">{readMin} min de leitura</span>
+      {wordGoal ? (
+        <span
+          className={"status-goal" + (words >= wordGoal ? " is-done" : "")}
+          title={`Meta de palavras: ${wordGoal} (configurável em ⚙)`}
+        >
+          🎯 {Math.min(100, Math.round((words / wordGoal) * 100))}%
+        </span>
+      ) : null}
+      <span className="status-zoom">
+        <button type="button" className="status-zoom-btn" onClick={() => onZoomChange(zoom - 10)} title="Diminuir zoom (Ctrl −)">−</button>
+        <button type="button" className="status-zoom-val" onClick={() => onZoomChange(100)} title="Restaurar zoom (Ctrl 0)">{zoom}%</button>
+        <button type="button" className="status-zoom-btn" onClick={() => onZoomChange(zoom + 10)} title="Aumentar zoom (Ctrl +)">+</button>
+      </span>
     </div>
   );
 }

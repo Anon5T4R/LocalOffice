@@ -128,6 +128,43 @@ const ITEMS: SlashItem[] = [
       editor.chain().focus().deleteRange(range).setPageBreak().run();
     },
   },
+  {
+    title: "Nota de rodapé",
+    subtitle: "Referência + nota no fim",
+    icon: "⁺",
+    keywords: "nota rodape footnote referencia citacao",
+    command: ({ editor, range }) => {
+      editor.chain().focus().deleteRange(range).addFootnote().run();
+    },
+  },
+  {
+    title: "Sumário",
+    subtitle: "Índice dos títulos (com páginas no PDF)",
+    icon: "☰",
+    keywords: "sumario indice toc table of contents titulos",
+    command: ({ editor, range }) => {
+      editor.chain().focus().deleteRange(range).insertTableOfContents().run();
+    },
+  },
+  {
+    title: "Citação bibliográfica",
+    subtitle: 'Digite "[@" para buscar na bibliografia',
+    icon: "❞",
+    keywords: "citacao citation referencia bibliografia zotero bibtex",
+    command: ({ editor, range }) => {
+      // Inserting the trigger text opens the reference autocomplete.
+      editor.chain().focus().deleteRange(range).insertContent("[@").run();
+    },
+  },
+  {
+    title: "Referências",
+    subtitle: "Lista formatada das obras citadas",
+    icon: "📚",
+    keywords: "referencias bibliografia bibliography obras citadas",
+    command: ({ editor, range }) => {
+      editor.chain().focus().deleteRange(range).insertBibliography().run();
+    },
+  },
 ];
 
 export function getSlashItems(query: string): SlashItem[] {

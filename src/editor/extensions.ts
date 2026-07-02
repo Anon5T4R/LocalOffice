@@ -1,6 +1,6 @@
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
-import Image from "@tiptap/extension-image";
+import { ResizableImage } from "./ResizableImage";
 import { Table } from "@tiptap/extension-table";
 import { TableRow } from "@tiptap/extension-table-row";
 import { TableHeader } from "@tiptap/extension-table-header";
@@ -12,12 +12,22 @@ import { Color } from "@tiptap/extension-color";
 import FontFamily from "@tiptap/extension-font-family";
 import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
+import Subscript from "@tiptap/extension-subscript";
+import Superscript from "@tiptap/extension-superscript";
+import { FootnoteRef, Footnote, Footnotes } from "./Footnotes";
+import { HeadingNumbers } from "./HeadingNumbers";
+import { TableOfContents } from "./TableOfContents";
+import { Citation, CitationSuggestion } from "./Citation";
+import { Bibliography } from "./Bibliography";
+import { CommentMark, InsertionMark, DeletionMark, TrackChanges } from "./Review";
 import { SlashCommand } from "./slash/SlashCommand";
+import { loadSettings } from "../lib/settings";
 import { SearchExtension } from "./search/SearchExtension";
 import { PageBreak } from "./PageBreak";
 import { FontSize } from "./FontSize";
 import { LetterSpacing } from "./LetterSpacing";
 import { LineHeight } from "./LineHeight";
+import { Indent } from "./Indent";
 
 export function buildExtensions() {
   return [
@@ -28,7 +38,7 @@ export function buildExtensions() {
     Placeholder.configure({
       placeholder: 'Digite "/" para comandos, ou comece a escrever…',
     }),
-    Image.configure({ inline: false, allowBase64: true }),
+    ResizableImage.configure({ inline: false, allowBase64: true }),
     Table.configure({ resizable: true }),
     TableRow,
     TableHeader,
@@ -41,8 +51,26 @@ export function buildExtensions() {
     FontSize.configure({ types: ["textStyle"] }),
     LetterSpacing.configure({ types: ["textStyle"] }),
     LineHeight.configure({ types: ["paragraph", "heading"] }),
+    Indent,
     TaskList,
     TaskItem.configure({ nested: true }),
+    Subscript,
+    Superscript,
+    FootnoteRef,
+    Footnote,
+    Footnotes,
+    HeadingNumbers,
+    TableOfContents,
+    Citation,
+    CitationSuggestion,
+    Bibliography,
+    CommentMark,
+    InsertionMark,
+    DeletionMark,
+    TrackChanges.configure({
+      // Read on every change so renaming the author in settings applies live.
+      getAuthor: () => loadSettings().authorName || "Autor",
+    }),
     PageBreak,
     SlashCommand,
     SearchExtension,
