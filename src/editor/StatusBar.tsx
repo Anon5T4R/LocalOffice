@@ -4,7 +4,7 @@ import { SaveStatus } from "../lib/tabs";
 import { useSettings } from "../state/SettingsContext";
 import { useEditorInstance } from "../state/EditorContext";
 
-const PAGE_HEIGHT_PX: Record<string, number> = {
+const FULL_PAGE_PX: Record<string, number> = {
   classic: 980,
   a4: 1123,
   a5: 794,
@@ -21,18 +21,15 @@ function countWords(text: string): number {
 
 interface StatusBarProps {
   onZoomChange: (z: number) => void;
-  /** Exact count from the measured ghost pages; when absent we estimate. */
-  measuredPages?: number;
   /** Autosave/save pipeline state; errors stay visible until a save succeeds. */
   saveStatus?: SaveStatus;
 }
 
-export function StatusBar({ onZoomChange, measuredPages, saveStatus }: StatusBarProps) {
+export function StatusBar({ onZoomChange, saveStatus }: StatusBarProps) {
   const editor = useEditorInstance();
   const { settings } = useSettings();
   const pageFormat = settings.pageFormat || "classic";
   const zoom = settings.zoom || 100;
-  const zoomFactor = zoom / 100;
   const wordGoal = settings.wordGoal || 0;
   const { words, chars, charsNoSpaces, paragraphs, breaks, selWords, selChars } = useEditorState({
     editor,
@@ -59,25 +56,25 @@ export function StatusBar({ onZoomChange, measuredPages, saveStatus }: StatusBar
   });
 
   const [heightPages, setHeightPages] = useState(1);
-  // scrollHeight scales with the ancestor CSS zoom; scale the page height to match.
-  const pagePx = (PAGE_HEIGHT_PX[pageFormat] || 980) * zoomFactor;
+  const margins = settings.pageMargins || { top: 56, bottom: 56, left: 72, right: 72 };
+  const printablePx = (FULL_PAGE_PX[pageFormat] || 980) - margins.top - margins.bottom;
 
   useEffect(() => {
     const el = editor.view.dom as HTMLElement;
-    const measure = () => setHeightPages(Math.max(1, Math.ceil(el.scrollHeight / pagePx)));
+    const measure = () => setHeightPages(Math.max(1, Math.ceil(el.scrollHeight / printablePx)));
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [editor, pagePx]);
+  }, [editor, printablePx]);
 
-  const pages = measuredPages ?? Math.max(heightPages, breaks + 1);
+  const pages = Math.max(heightPages, breaks + 1);
   const readMin = Math.max(1, Math.round(words / WORDS_PER_MINUTE));
 
   return (
     <div className="status-bar">
-      <span title={measuredPages ? "Contagem medida pelo layout das páginas" : "Estimativa baseada na altura do conteúdo"}>
-        {measuredPages ? "" : "~"}{pages} página{pages > 1 ? "s" : ""}
+      <span title="Estimativa baseada na altura do conteúdo">
+        ~{pages} página{pages > 1 ? "s" : ""}
       </span>
       {selWords > 0 ? (
         <span title="Seleção">{selWords} de {words} palavra{words === 1 ? "" : "s"} · {selChars} caractere{selChars === 1 ? "" : "s"}</span>

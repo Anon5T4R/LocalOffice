@@ -23,7 +23,7 @@ import { useFileOperations } from "./hooks/useFileOperations";
 import { useZoom } from "./hooks/useZoom";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 import { useCitationRegistry } from "./hooks/useCitationRegistry";
-import { useGhostPages } from "./hooks/useGhostPages";
+
 import { useAppLifecycle } from "./hooks/useAppLifecycle";
 import { useSettings } from "./state/SettingsContext";
 import { EditorProvider } from "./state/EditorContext";
@@ -129,14 +129,6 @@ function App() {
     },
   });
   editorRef.current = editor;
-
-  const { ghostPages, ghostHtml } = useGhostPages(editor, {
-    isPaginated,
-    pageFormat,
-    pageHeightPx: dims.pxHeight,
-    pageMargins,
-    zoomFactor,
-  });
 
   // Spellcheck: drive the WebView's native checker via DOM attributes so it stays
   // reactive to settings (WebView2 uses system dictionaries; WebKitGTK uses hunspell).
@@ -250,7 +242,6 @@ function App() {
     };
     if (pageFormat !== "classic") {
       style.width = dims.width;
-      style.height = dims.height;
     }
     return style;
   }, [pageFormat, dims, pageMargins]);
@@ -290,33 +281,12 @@ function App() {
               {showSearch && <SearchBar onClose={() => setShowSearch(false)} />}
               <div className={`pages-container${isPaginated ? " paginated" : ""}`} style={{ zoom: zoomFactor }}>
                 <div className={`page${isPaginated ? " fixed" : ""}`} style={pageStyle}>
-                  {isPaginated ? (
-                    <div className="page-clip">
-                      <EditorContent editor={editor} />
-                    </div>
-                  ) : (
-                    <EditorContent editor={editor} />
-                  )}
+                  <EditorContent editor={editor} />
                 </div>
-                {isPaginated &&
-                  ghostPages.map((pg, i) => (
-                    // Same padding/width as the editable page (via pageStyle) so the
-                    // mirror reflows identically — otherwise offsets don't line up.
-                    <div key={i} className="page fixed" style={pageStyle}>
-                      <div className="page-clip" style={{ height: pg.height }}>
-                        <div
-                          className="page-ghost ProseMirror"
-                          style={{ transform: `translateY(-${pg.top}px)` }}
-                          dangerouslySetInnerHTML={{ __html: ghostHtml }}
-                        />
-                      </div>
-                    </div>
-                  ))}
               </div>
             </div>
             <StatusBar
               onZoomChange={setZoomAbs}
-              measuredPages={isPaginated ? ghostPages.length + 1 : undefined}
               saveStatus={saveStatus}
             />
           </div>
