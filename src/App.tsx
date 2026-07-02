@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useEditor, EditorContent, type Editor } from "@tiptap/react";
 import { invoke } from "@tauri-apps/api/core";
-import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { buildExtensions } from "./editor/extensions";
 import { MenuBar } from "./editor/MenuBar";
 import { Ribbon } from "./editor/Ribbon";
@@ -26,6 +25,7 @@ import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 import { useCitationRegistry } from "./hooks/useCitationRegistry";
 import { useGhostPages } from "./hooks/useGhostPages";
 import { useAppLifecycle } from "./hooks/useAppLifecycle";
+import { useCustomFonts } from "./hooks/useCustomFonts";
 import {
   Recent,
   Settings,
@@ -124,7 +124,6 @@ function App() {
   const [focusMode, setFocusMode] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [showVersionHistory, setShowVersionHistory] = useState(false);
-  const [systemFonts, setSystemFonts] = useState<string[]>([]);
 
   const pageFormat = settings.pageFormat || "classic";
   const pageMargins = settings.pageMargins || { top: 56, bottom: 56, left: 72, right: 72 };
@@ -140,31 +139,7 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Load system fonts
-  useEffect(() => {
-    invoke<string[]>("list_system_fonts")
-      .then((fonts) => setSystemFonts(fonts))
-      .catch(() => {});
-  }, []);
-
-  // Re-register custom fonts on startup
-  useEffect(() => {
-    if (!customFonts.length) return;
-    let cancelled = false;
-    (async () => {
-      for (const font of customFonts) {
-        if (cancelled) break;
-        try {
-          const info = await invoke<{ name: string; base64: string }>("import_font", { path: font.path });
-          const ff = new FontFace(info.name, `url('data:font/ttf;base64,${info.base64}')`);
-          await ff.load();
-          document.fonts.add(ff);
-        } catch { /* skip fonts that can't be loaded */ }
-      }
-    })();
-    return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const { systemFonts, handleImportFont } = useCustomFonts(customFonts, updateSettings);
 
   const markDirty = useCallback(() => {
     const id = activeIdRef.current;
@@ -216,32 +191,6 @@ function App() {
   const ai = useLocalAi(editor, settings, updateSettings);
 
   useAppLifecycle({ editor, editorRef, tabsRef, activeIdRef, setTabs, setActiveId, openDocFile });
-
-  // ---- Font import ----
-  const handleImportFont = useCallback(async () => {
-    try {
-      const selected = await openDialog({
-        multiple: false,
-        filters: [
-          { name: "Fontes", extensions: ["ttf", "otf", "ttc"] },
-        ],
-      });
-      if (!selected || Array.isArray(selected)) return;
-      const info = await invoke<{ name: string; base64: string }>("import_font", { path: selected });
-      const fontName = info.name;
-      const dataUrl = `url('data:font/ttf;base64,${info.base64}')`;
-      const fontFace = new FontFace(fontName, dataUrl);
-      await fontFace.load();
-      document.fonts.add(fontFace);
-      const existing = customFonts.find((f) => f.name === fontName || f.path === selected);
-      if (!existing) {
-        const next = [...customFonts, { name: fontName, path: selected }];
-        updateSettings({ customFonts: next });
-      }
-    } catch (e) {
-      window.alert(`Não foi possível importar a fonte:\n${e}`);
-    }
-  }, [customFonts, updateSettings]);
 
   // ---- Page format / margins ----
   const handlePageFormatChange = useCallback(
