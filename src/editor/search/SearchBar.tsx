@@ -14,7 +14,7 @@ export function SearchBar({ onClose }: { onClose: () => void }) {
       const s = searchKey.getState(editor.state);
       return { total: s?.results.length ?? 0, current: s?.current ?? 0 };
     },
-  })!;
+  });
 
   useEffect(() => {
     inputRef.current?.focus();

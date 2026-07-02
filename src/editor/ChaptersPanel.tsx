@@ -3,6 +3,7 @@ import { Editor, useEditorState } from "@tiptap/react";
 import type { Node as PMNode } from "@tiptap/pm/model";
 import { revealPos } from "./reveal";
 import { useEditorInstance } from "../state/EditorContext";
+import { arrayOfObjectsEqual } from "../lib/equality";
 
 interface Heading {
   level: number;
@@ -79,8 +80,8 @@ export function ChaptersPanel({ onClose }: { onClose: () => void }) {
       });
       return out;
     },
-    equalityFn: (a, b) => JSON.stringify(a) === JSON.stringify(b),
-  })!;
+    equalityFn: arrayOfObjectsEqual,
+  });
 
   const go = (pos: number) => revealPos(editor, pos);
 

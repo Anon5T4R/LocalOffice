@@ -56,7 +56,7 @@ export function StatusBar({ onZoomChange, measuredPages, saveStatus }: StatusBar
         selChars: selText.replace(/\n/g, "").length,
       };
     },
-  })!;
+  });
 
   const [heightPages, setHeightPages] = useState(1);
   // scrollHeight scales with the ancestor CSS zoom; scale the page height to match.

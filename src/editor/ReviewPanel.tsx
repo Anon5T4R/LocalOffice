@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Editor, useEditorState } from "@tiptap/react";
 import { useSettings } from "../state/SettingsContext";
 import { useEditorInstance } from "../state/EditorContext";
+import { arrayOfObjectsEqual } from "../lib/equality";
 
 interface CommentItem {
   id: string;
@@ -93,8 +94,12 @@ export function ReviewPanel({ onClose }: ReviewPanelProps) {
       changes: collectChanges(editor),
       hasSelection: !editor.state.selection.empty,
     }),
-    equalityFn: (a, b) => JSON.stringify(a) === JSON.stringify(b),
-  })!;
+    equalityFn: (a, b) =>
+      !!b &&
+      a.hasSelection === b.hasSelection &&
+      arrayOfObjectsEqual(a.comments, b.comments) &&
+      arrayOfObjectsEqual(a.changes, b.changes),
+  });
 
   const go = (from: number) => editor.chain().focus().setTextSelection(from).scrollIntoView().run();
 

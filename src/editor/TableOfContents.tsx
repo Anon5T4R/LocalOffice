@@ -6,6 +6,7 @@ import {
   useEditorState,
 } from "@tiptap/react";
 import { revealPos } from "./reveal";
+import { arrayOfObjectsEqual } from "../lib/equality";
 
 declare module "@tiptap/core" {
   interface Commands<ReturnType> {
@@ -45,8 +46,8 @@ function TocView({ editor }: NodeViewProps) {
       });
       return out;
     },
-    equalityFn: (a, b) => JSON.stringify(a) === JSON.stringify(b),
-  })!;
+    equalityFn: arrayOfObjectsEqual,
+  });
 
   const go = (pos: number) => revealPos(editor, pos);
 
