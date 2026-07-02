@@ -1,5 +1,6 @@
 import type { JSONContent } from "@tiptap/core";
 import { DocFormat, baseName } from "./document";
+import { newId } from "./id";
 
 export interface Tab {
   id: string;
@@ -12,11 +13,16 @@ export interface Tab {
 
 export const EMPTY_DOC: JSONContent = { type: "doc", content: [{ type: "paragraph" }] };
 
-let counter = 0;
+/** State of the tab-save pipeline (autosave and manual), shown in the status bar. */
+export type SaveStatus =
+  | { kind: "idle" }
+  | { kind: "saving" }
+  | { kind: "saved"; at: number }
+  | { kind: "error"; message: string; at: number };
+
 export function newTab(partial: Partial<Tab> = {}): Tab {
-  counter += 1;
   return {
-    id: `tab-${Date.now()}-${counter}`,
+    id: newId("tab-"),
     filePath: null,
     format: "markdown",
     dirty: false,

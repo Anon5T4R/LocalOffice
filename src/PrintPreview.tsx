@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { PrintOptions, cleanupPaged, printLegacy, renderPaged } from "./lib/pdf";
+import { useFocusTrap } from "./hooks/useFocusTrap";
 
 interface PrintPreviewProps {
   html: string;
@@ -9,7 +10,7 @@ interface PrintPreviewProps {
 }
 
 type PreviewState =
-  | { status: "rendering" }
+  | { status: "rendering"; pagesSoFar: number }
   | { status: "ready"; pages: number }
   | { status: "error"; message: string };
 
@@ -20,15 +21,20 @@ type PreviewState =
  */
 export function PrintPreview({ html, options, onClose }: PrintPreviewProps) {
   const pagesRef = useRef<HTMLDivElement>(null);
-  const [state, setState] = useState<PreviewState>({ status: "rendering" });
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [state, setState] = useState<PreviewState>({ status: "rendering", pagesSoFar: 0 });
+
+  useFocusTrap(rootRef);
 
   useEffect(() => {
     const container = pagesRef.current;
     if (!container) return;
     let cancelled = false;
 
-    setState({ status: "rendering" });
-    renderPaged(html, container, options)
+    setState({ status: "rendering", pagesSoFar: 0 });
+    renderPaged(html, container, options, (pagesSoFar) => {
+      if (!cancelled) setState({ status: "rendering", pagesSoFar });
+    })
       .then((pages) => {
         if (!cancelled) setState({ status: "ready", pages });
       })
@@ -58,13 +64,15 @@ export function PrintPreview({ html, options, onClose }: PrintPreviewProps) {
   };
 
   return createPortal(
-    <div className="print-preview" role="dialog" aria-label="Visualizar impressão">
+    <div ref={rootRef} className="print-preview" role="dialog" aria-modal="true" aria-label="Visualizar impressão">
       <div className="print-preview-toolbar">
         <strong>Visualizar impressão</strong>
         <span className="print-preview-info">
-          {state.status === "rendering" && "Paginando…"}
+          {state.status === "rendering" &&
+            (state.pagesSoFar > 0 ? `Paginando… (${state.pagesSoFar} página${state.pagesSoFar === 1 ? "" : "s"})` : "Paginando…")}
           {state.status === "ready" && `${state.pages} página${state.pages === 1 ? "" : "s"}`}
         </span>
+        {state.status === "rendering" && <span className="print-preview-progress" aria-hidden="true" />}
         <div className="tb-spacer" />
         <button
           className="tb-btn"

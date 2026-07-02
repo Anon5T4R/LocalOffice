@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { Editor, useEditorState } from "@tiptap/react";
+import { useEditorState } from "@tiptap/react";
 import { searchKey } from "./SearchExtension";
+import { useEditorInstance } from "../../state/EditorContext";
 
-export function SearchBar({ editor, onClose }: { editor: Editor; onClose: () => void }) {
+export function SearchBar({ onClose }: { onClose: () => void }) {
+  const editor = useEditorInstance();
   const [term, setTerm] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -12,7 +14,7 @@ export function SearchBar({ editor, onClose }: { editor: Editor; onClose: () => 
       const s = searchKey.getState(editor.state);
       return { total: s?.results.length ?? 0, current: s?.current ?? 0 };
     },
-  })!;
+  });
 
   useEffect(() => {
     inputRef.current?.focus();

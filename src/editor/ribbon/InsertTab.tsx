@@ -1,0 +1,59 @@
+import { useEditorState } from "@tiptap/react";
+import { useEditorInstance } from "../../state/EditorContext";
+import { Btn } from "./Btn";
+
+/** "Inserir": tabelas, imagem, link, quebras, notas, sumário, citações. */
+export function InsertTab({ onInsertImage }: { onInsertImage: () => void }) {
+  const editor = useEditorInstance();
+
+  const s = useEditorState({
+    editor,
+    selector: ({ editor }) => ({
+      inTable: editor.isActive("table"),
+      link: editor.isActive("link"),
+      codeBlock: editor.isActive("codeBlock"),
+    }),
+  });
+
+  const chain = () => editor.chain().focus();
+
+  const setLink = () => {
+    const prev = editor.getAttributes("link").href ?? "https://";
+    const url = window.prompt("URL do link (vazio para remover):", prev);
+    if (url === null) return;
+    if (url === "") chain().unsetLink().run();
+    else chain().extendMarkRange("link").setLink({ href: url }).run();
+  };
+
+  return (
+    <div className="ribbon-body">
+      <div className="tb-group">
+        <Btn
+          onClick={() => chain().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}
+          title="Inserir tabela 3×3"
+          wide
+        >
+          ▦ Tabela
+        </Btn>
+        <Btn onClick={() => chain().addRowAfter().run()} disabled={!s.inTable} title="Adicionar linha">+Lin</Btn>
+        <Btn onClick={() => chain().addColumnAfter().run()} disabled={!s.inTable} title="Adicionar coluna">+Col</Btn>
+        <Btn onClick={() => chain().deleteRow().run()} disabled={!s.inTable} title="Remover linha">−Lin</Btn>
+        <Btn onClick={() => chain().deleteColumn().run()} disabled={!s.inTable} title="Remover coluna">−Col</Btn>
+        <Btn onClick={() => chain().deleteTable().run()} disabled={!s.inTable} title="Excluir tabela">✕Tab</Btn>
+      </div>
+      <div className="tb-sep" />
+
+      <div className="tb-group">
+        <Btn onClick={onInsertImage} title="Inserir imagem" wide>🖼 Imagem</Btn>
+        <Btn onClick={setLink} active={s.link} title="Inserir/editar link" wide>🔗 Link</Btn>
+        <Btn onClick={() => chain().setHorizontalRule().run()} title="Linha divisória" wide>— Linha</Btn>
+        <Btn onClick={() => chain().setPageBreak().run()} title="Quebra de página (nova página no PDF)" wide>⤓ Quebra</Btn>
+        <Btn onClick={() => chain().addFootnote().run()} title="Nota de rodapé (Ctrl+Alt+F)" wide>⁺ Nota</Btn>
+        <Btn onClick={() => chain().insertTableOfContents().run()} title="Sumário (índice dos títulos, com páginas no PDF)" wide>☰ Sumário</Btn>
+        <Btn onClick={() => chain().insertContent("[@").run()} title='Citação bibliográfica (ou digite "[@")' wide>❞ Citação</Btn>
+        <Btn onClick={() => chain().insertBibliography().run()} title="Lista de referências das obras citadas" wide>📚 Refs</Btn>
+        <Btn onClick={() => chain().toggleCodeBlock().run()} active={s.codeBlock} title="Bloco de código" wide>{"{ } Código"}</Btn>
+      </div>
+    </div>
+  );
+}

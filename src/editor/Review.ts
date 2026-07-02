@@ -3,6 +3,7 @@ import { Plugin, PluginKey, TextSelection } from "@tiptap/pm/state";
 import type { Node as PMNode, Slice, Mark as PMMark } from "@tiptap/pm/model";
 import { Mapping, ReplaceStep } from "@tiptap/pm/transform";
 import { MAINTENANCE_META } from "./maintenanceMeta";
+import { newId } from "../lib/id";
 
 declare module "@tiptap/core" {
   interface Commands<ReturnType> {
@@ -21,10 +22,6 @@ declare module "@tiptap/core" {
       resolveAllChanges: (accept: boolean) => ReturnType;
     };
   }
-}
-
-function newId(): string {
-  return `c-${Math.random().toString(36).slice(2, 9)}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -87,7 +84,7 @@ export const CommentMark = Mark.create({
         (text: string, author: string) =>
         ({ state, commands }) => {
           if (state.selection.empty) return false;
-          return commands.setMark(this.name, { id: newId(), text, author, ts: Date.now() });
+          return commands.setMark(this.name, { id: newId("c-"), text, author, ts: Date.now() });
         },
       updateComment:
         (id: string, patch: { text?: string; resolved?: boolean }) =>

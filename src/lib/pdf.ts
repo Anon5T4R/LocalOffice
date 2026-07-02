@@ -12,6 +12,12 @@ import { HeaderFooterSpec, PageFormat, PageMargins } from "./settings";
  *
  * Fallback path: `printLegacy` keeps the old direct-to-print flow so exporting
  * never depends on paged.js working.
+ *
+ * Dependency risk (avaliado em docs/SPIKE-VIVLIOSTYLE.md): paged.js 0.4.3 não
+ * recebe release desde 2022. A alternativa mantida (Vivliostyle) é AGPL-3.0 —
+ * incompatível com distribuir este app MIT — e não rende melhor no nosso
+ * conjunto de features. Se um dia quebrar: vendorizar/forkar (MIT) ou cair no
+ * printLegacy. A API de progresso abaixo é agnóstica de motor de propósito.
  */
 
 export interface PrintOptions {
@@ -95,7 +101,14 @@ export function preparePrintHtml(html: string, opts: Pick<PrintOptions, "numberH
     const label = advanceHeadingCounter(counters, level);
     const text = h.textContent ?? "";
     if (!h.id) h.id = `toc-h-${i}`;
-    if (opts.numberHeadings) h.prepend(doc.createTextNode(`${label} `));
+    if (opts.numberHeadings) {
+      // Marked span (not a bare text node) so reimport paths can strip the
+      // baked number deterministically — see lib/bakedHeadingNumbers.ts.
+      const num = doc.createElement("span");
+      num.setAttribute("data-baked-heading-num", "");
+      num.textContent = `${label} `;
+      h.prepend(num);
+    }
     entries.push({ level, text: opts.numberHeadings ? `${label} ${text}` : text, id: h.id });
   });
 
@@ -270,9 +283,10 @@ export function cleanupPaged(container?: HTMLElement | null): void {
 export function renderPaged(
   contentHtml: string,
   container: HTMLElement,
-  opts: PrintOptions
+  opts: PrintOptions,
+  onProgress?: (pagesSoFar: number) => void
 ): Promise<number> {
-  const job = renderQueue.then(() => doRenderPaged(contentHtml, container, opts));
+  const job = renderQueue.then(() => doRenderPaged(contentHtml, container, opts, onProgress));
   renderQueue = job.catch(() => {}); // a failed render must not block the next one
   return job;
 }
@@ -282,7 +296,8 @@ let renderQueue: Promise<unknown> = Promise.resolve();
 async function doRenderPaged(
   contentHtml: string,
   container: HTMLElement,
-  opts: PrintOptions
+  opts: PrintOptions,
+  onProgress?: (pagesSoFar: number) => void
 ): Promise<number> {
   // Lazy import: paged.js is only needed for print/preview, so it lives in its
   // own chunk and never delays app startup.
@@ -301,6 +316,12 @@ async function doRenderPaged(
   );
   try {
     const previewer = new Previewer();
+    // Progress: the total is only known at the end, so callers get a live
+    // page count, not a percentage.
+    if (onProgress) {
+      let count = 0;
+      previewer.on("page", () => onProgress(++count));
+    }
     // Safety net: a render that never settles would jam the queue for every
     // future render. 90s is far beyond any legitimate pagination time.
     const flow = await Promise.race([

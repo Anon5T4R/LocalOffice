@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Review data (comments, tracked changes) <-> pandoc's docx representation.
  *
  * pandoc's docx writer turns spans with class comment-start/comment-end into
@@ -6,6 +6,8 @@
  * date attributes) into native tracked changes. Its docx reader (with
  * --track-changes=all) emits the same shapes back.
  */
+
+import { newId } from "./id";
 
 const isoDate = (ts: number) => new Date(ts || Date.now()).toISOString();
 
@@ -64,7 +66,7 @@ export function reviewFromPandoc(html: string): string {
   const doc = new DOMParser().parseFromString(html, "text/html");
 
   doc.querySelectorAll("span.comment-start").forEach((start) => {
-    const id = start.id || `c-${Math.random().toString(36).slice(2, 9)}`;
+    const id = start.id || newId("c-");
     // pandoc's html writer prefixes unknown attributes with data- on reimport.
     const author = start.getAttribute("author") || start.getAttribute("data-author") || "";
     const text = start.textContent || "";

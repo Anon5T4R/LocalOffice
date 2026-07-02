@@ -2,6 +2,8 @@ import { useState } from "react";
 import { Editor, useEditorState } from "@tiptap/react";
 import type { Node as PMNode } from "@tiptap/pm/model";
 import { revealPos } from "./reveal";
+import { useEditorInstance } from "../state/EditorContext";
+import { arrayOfObjectsEqual } from "../lib/equality";
 
 interface Heading {
   level: number;
@@ -60,7 +62,8 @@ function moveSection(editor: Editor, srcPos: number, dstPos: number | null): voi
   editor.commands.focus();
 }
 
-export function ChaptersPanel({ editor, onClose }: { editor: Editor; onClose: () => void }) {
+export function ChaptersPanel({ onClose }: { onClose: () => void }) {
+  const editor = useEditorInstance();
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [overIndex, setOverIndex] = useState<number | "end" | null>(null);
 
@@ -77,8 +80,8 @@ export function ChaptersPanel({ editor, onClose }: { editor: Editor; onClose: ()
       });
       return out;
     },
-    equalityFn: (a, b) => JSON.stringify(a) === JSON.stringify(b),
-  })!;
+    equalityFn: arrayOfObjectsEqual,
+  });
 
   const go = (pos: number) => revealPos(editor, pos);
 

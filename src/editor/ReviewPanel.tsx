@@ -1,5 +1,8 @@
 import { useState } from "react";
 import { Editor, useEditorState } from "@tiptap/react";
+import { useSettings } from "../state/SettingsContext";
+import { useEditorInstance } from "../state/EditorContext";
+import { arrayOfObjectsEqual } from "../lib/equality";
 
 interface CommentItem {
   id: string;
@@ -21,10 +24,6 @@ interface ChangeItem {
 }
 
 interface ReviewPanelProps {
-  editor: Editor;
-  trackChanges: boolean;
-  onToggleTrackChanges: () => void;
-  authorName: string;
   onClose: () => void;
 }
 
@@ -81,7 +80,11 @@ function collectChanges(editor: Editor): ChangeItem[] {
   return out;
 }
 
-export function ReviewPanel({ editor, trackChanges, onToggleTrackChanges, authorName, onClose }: ReviewPanelProps) {
+export function ReviewPanel({ onClose }: ReviewPanelProps) {
+  const editor = useEditorInstance();
+  const { settings, updateSettings } = useSettings();
+  const trackChanges = settings.trackChanges === true;
+  const authorName = settings.authorName || "Autor";
   const [newComment, setNewComment] = useState("");
 
   const { comments, changes, hasSelection } = useEditorState({
@@ -91,8 +94,12 @@ export function ReviewPanel({ editor, trackChanges, onToggleTrackChanges, author
       changes: collectChanges(editor),
       hasSelection: !editor.state.selection.empty,
     }),
-    equalityFn: (a, b) => JSON.stringify(a) === JSON.stringify(b),
-  })!;
+    equalityFn: (a, b) =>
+      !!b &&
+      a.hasSelection === b.hasSelection &&
+      arrayOfObjectsEqual(a.comments, b.comments) &&
+      arrayOfObjectsEqual(a.changes, b.changes),
+  });
 
   const go = (from: number) => editor.chain().focus().setTextSelection(from).scrollIntoView().run();
 
@@ -112,7 +119,7 @@ export function ReviewPanel({ editor, trackChanges, onToggleTrackChanges, author
       </div>
 
       <label className="review-track-toggle" title="Registrar inserções e exclusões como alterações controladas">
-        <input type="checkbox" checked={trackChanges} onChange={onToggleTrackChanges} />
+        <input type="checkbox" checked={trackChanges} onChange={() => updateSettings({ trackChanges: !trackChanges })} />
         Controlar alterações
       </label>
 
