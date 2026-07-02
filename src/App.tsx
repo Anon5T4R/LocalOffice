@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useEditor, EditorContent } from "@tiptap/react";
+import { useEditor, EditorContent, type Editor } from "@tiptap/react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { ask, open as openDialog } from "@tauri-apps/plugin-dialog";
@@ -23,7 +23,6 @@ import * as citationStore from "./lib/citationStore";
 import { readAndClearRescue, registerRescueProvider } from "./lib/rescue";
 import { DocTemplate, applyTemplateContent } from "./lib/templates";
 import {
-  DocFile,
   DocFormat,
   baseName,
   openDocument,
@@ -31,7 +30,8 @@ import {
   saveDocumentAs,
   saveDocumentTo,
 } from "./lib/document";
-import { Tab, EMPTY_DOC, SaveStatus, newTab, tabTitle } from "./lib/tabs";
+import { EMPTY_DOC, SaveStatus, newTab, tabTitle } from "./lib/tabs";
+import { useDocumentTabs } from "./hooks/useDocumentTabs";
 import {
   Recent,
   Settings,
@@ -96,9 +96,31 @@ function measurePageOffsets(el: HTMLElement, pageH: number): number[] {
 }
 
 function App() {
-  const first = useRef<Tab>(newTab());
-  const [tabs, setTabs] = useState<Tab[]>(() => [first.current]);
-  const [activeId, setActiveId] = useState<string>(first.current.id);
+  const editorRef = useRef<Editor | null>(null);
+
+  const {
+    tabs,
+    setTabs,
+    activeId,
+    setActiveId,
+    activeTab,
+    tabsRef,
+    activeIdRef,
+    markTabDirty,
+    switchTab,
+    newBlankTab,
+    openDocFile,
+    closeTab,
+  } = useDocumentTabs(editorRef, {
+    // Invoked at event time, so referencing queueSave/cancelAutosave (declared
+    // below) is safe — they exist before any switch/close can happen.
+    onLeaveDirtyTab: (tab, html) => {
+      cancelAutosave();
+      queueSave(tab, html).catch(() => {});
+    },
+    onCloseTab: (id) => editSeq.current.delete(id),
+    onOpened: (path) => remember(path),
+  });
 
   const [settings, setSettings] = useState<Settings>(() => loadSettings());
   const [recents, setRecents] = useState<Recent[]>(() => loadRecents());
@@ -125,12 +147,6 @@ function App() {
 
   const dims = PAGE_DIMS[pageFormat] || PAGE_DIMS.classic;
   const isPaginated = pageFormat !== "classic";
-
-  // Refs so timers / editor callbacks always see fresh state.
-  const tabsRef = useRef(tabs);
-  tabsRef.current = tabs;
-  const activeIdRef = useRef(activeId);
-  activeIdRef.current = activeId;
 
   useEffect(() => {
     applyTheme(settings.theme);
@@ -178,8 +194,8 @@ function App() {
   const markDirty = useCallback(() => {
     const id = activeIdRef.current;
     editSeq.current.set(id, (editSeq.current.get(id) ?? 0) + 1);
-    setTabs((ts) => ts.map((t) => (t.id === id && !t.dirty ? { ...t, dirty: true } : t)));
-  }, []);
+    markTabDirty(id);
+  }, [activeIdRef, markTabDirty]);
 
   // Debounced autosave: only writes when you pause typing (zero cost while typing),
   // and never loses more than a couple seconds of work. `scheduleRef` always points
@@ -226,13 +242,14 @@ function App() {
 
   const editor = useEditor({
     extensions: buildExtensions(),
-    content: first.current.doc,
+    content: EMPTY_DOC,
     autofocus: true,
     onUpdate: () => {
       markDirty();
       scheduleRef.current();
     },
   });
+  editorRef.current = editor;
 
   // Ghost pages: measure page boundaries (manual breaks + overflow) and mirror
   // the content into fixed-size ghost pages. Runs on mount/format change and on
@@ -382,93 +399,6 @@ function App() {
       })
       .catch(() => {});
   }, [editor]);
-
-  // ---- Tab operations (single editor, content swap) ----
-
-  const switchTab = useCallback(
-    (id: string) => {
-      if (!editor || id === activeIdRef.current) return;
-      const oldId = activeIdRef.current;
-      const json = editor.getJSON();
-      const target = tabsRef.current.find((t) => t.id === id);
-      if (!target) return;
-      // Persist the outgoing tab on its way out — switching must never leave
-      // unsaved work behind. Fire-and-forget: a failure keeps the tab dirty
-      // and surfaces in the status bar.
-      const old = tabsRef.current.find((t) => t.id === oldId);
-      if (old?.dirty && old.filePath) {
-        cancelAutosave();
-        queueSave({ id: old.id, filePath: old.filePath, format: old.format }, editor.getHTML()).catch(() => {});
-      }
-      setTabs((ts) => ts.map((t) => (t.id === oldId ? { ...t, doc: json } : t)));
-      editor.commands.setContent(target.doc, { emitUpdate: false });
-      setActiveId(id);
-    },
-    [editor, queueSave, cancelAutosave]
-  );
-
-  const newBlankTab = useCallback(() => {
-    if (!editor) return;
-    const oldId = activeIdRef.current;
-    const json = editor.getJSON();
-    const t = newTab();
-    setTabs((ts) => ts.map((x) => (x.id === oldId ? { ...x, doc: json } : x)).concat(t));
-    editor.commands.setContent(EMPTY_DOC, { emitUpdate: false });
-    setActiveId(t.id);
-  }, [editor]);
-
-  const openDocFile = useCallback(
-    (doc: DocFile) => {
-      if (!editor) return;
-      const oldId = activeIdRef.current;
-      const active = tabsRef.current.find((t) => t.id === oldId);
-      const reuse = !!active && !active.filePath && !active.dirty;
-
-      if (reuse) {
-        editor.commands.setContent(doc.html, { emitUpdate: false });
-        const json = editor.getJSON();
-        setTabs((ts) =>
-          ts.map((t) => (t.id === oldId ? { ...t, filePath: doc.path, format: doc.format, doc: json, dirty: false } : t))
-        );
-      } else {
-        const oldJson = editor.getJSON();
-        editor.commands.setContent(doc.html, { emitUpdate: false });
-        const newJson = editor.getJSON();
-        const t = newTab({ filePath: doc.path, format: doc.format, doc: newJson, dirty: false });
-        setTabs((ts) => ts.map((x) => (x.id === oldId ? { ...x, doc: oldJson } : x)).concat(t));
-        setActiveId(t.id);
-      }
-      remember(doc.path);
-    },
-    [editor, remember]
-  );
-
-  const closeTab = useCallback(
-    (id: string) => {
-      const t = tabsRef.current.find((x) => x.id === id);
-      if (!t || !editor) return;
-      if (t.dirty && !window.confirm(`"${tabTitle(t)}" tem alterações não salvas. Fechar mesmo assim?`)) return;
-
-      editSeq.current.delete(id);
-      const idx = tabsRef.current.findIndex((x) => x.id === id);
-      const remaining = tabsRef.current.filter((x) => x.id !== id);
-
-      if (remaining.length === 0) {
-        const nt = newTab();
-        editor.commands.setContent(EMPTY_DOC, { emitUpdate: false });
-        setTabs([nt]);
-        setActiveId(nt.id);
-        return;
-      }
-      if (id === activeIdRef.current) {
-        const neighbor = remaining[Math.min(idx, remaining.length - 1)];
-        editor.commands.setContent(neighbor.doc, { emitUpdate: false });
-        setActiveId(neighbor.id);
-      }
-      setTabs(remaining);
-    },
-    [editor]
-  );
 
   // ---- File operations ----
 
@@ -841,8 +771,6 @@ function App() {
     }
     return style;
   }, [pageFormat, dims, pageMargins]);
-
-  const activeTab = tabs.find((t) => t.id === activeId);
 
   return (
     <div className={"app" + (focusMode ? " focus-mode" : "")}>
