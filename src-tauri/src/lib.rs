@@ -42,6 +42,7 @@ pub fn run() {
             io::read_text_file,
             io::read_file_base64,
             io::write_text_file,
+            io::remove_file,
             pandoc::import_via_pandoc,
             pandoc::export_via_pandoc,
             pandoc::import_bibliography,

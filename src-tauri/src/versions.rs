@@ -108,28 +108,45 @@ pub(crate) async fn save_version(
     name: String,
     content: String,
 ) -> Result<(), String> {
-    let ts = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
-    let id = format!("v_{}", ts);
-
-    // Save content
     ensure_versions_dir(&app).await?;
+
+    // Generating the id, writing content and updating meta all happen under
+    // the store lock: two saves issued within the same millisecond (a
+    // double-click, or Enter auto-repeat in the history dialog) must not
+    // collide on the same id/content file, which would make pruning or
+    // deleting one entry silently corrupt the other.
+    let _guard = store.0.lock().await;
+    let mut meta = read_meta(&app, &doc_path).await?;
+
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default();
+    // `ts` stays second-resolution (VersionHistory.tsx displays it as
+    // `v.ts * 1000`) — only the id gets millisecond resolution plus an
+    // anti-collision suffix, since it's what content files are keyed on.
+    let ts = now.as_secs();
+    let mut id = format!("v_{}", now.as_millis());
+    while meta.versions.iter().any(|v| v.id == id) {
+        id.push('x'); // millisecond collision (rare, but not impossible)
+    }
+
     let cpath = version_content_path(&app, &doc_path, &id)?;
     tokio::fs::write(&cpath, &content)
         .await
         .map_err(|e| format!("salvar versão: {}", e))?;
 
-    // Update meta under the store lock so concurrent saves don't clobber it.
-    let _guard = store.0.lock().await;
-    let mut meta = read_meta(&app, &doc_path).await?;
     meta.versions.push(VersionEntry { id, name, ts });
 
     // Prune the oldest snapshots past the cap (entries are pushed in
     // chronological order, so draining from the front removes the oldest).
     while meta.versions.len() > MAX_VERSIONS_PER_DOC {
         let victim = meta.versions.remove(0);
+        // Legacy metas from before ids were made unique can still have two
+        // entries sharing one content file — don't unlink it out from under
+        // the surviving entry.
+        if meta.versions.iter().any(|v| v.id == victim.id) {
+            continue;
+        }
         if let Ok(cpath) = version_content_path(&app, &doc_path, &victim.id) {
             let _ = tokio::fs::remove_file(&cpath).await; // best-effort
         }
@@ -187,12 +204,15 @@ pub(crate) async fn delete_version(
     doc_path: String,
     version_id: String,
 ) -> Result<(), String> {
-    // Delete content file
-    let cpath = version_content_path(&app, &doc_path, &version_id)?;
-    let _ = tokio::fs::remove_file(&cpath).await;
-    // Remove from meta under the store lock.
     let _guard = store.0.lock().await;
     let mut meta = read_meta(&app, &doc_path).await?;
+    // A legacy duplicate-id entry can still share this content file with
+    // another surviving entry — only unlink it once nothing else points here.
+    let shared = meta.versions.iter().filter(|v| v.id == version_id).count() > 1;
     meta.versions.retain(|v| v.id != version_id);
+    if !shared {
+        let cpath = version_content_path(&app, &doc_path, &version_id)?;
+        let _ = tokio::fs::remove_file(&cpath).await;
+    }
     write_meta(&app, &meta).await
 }

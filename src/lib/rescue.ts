@@ -55,24 +55,30 @@ export async function writeRescue(): Promise<boolean> {
   }
 }
 
-/** Read a pending rescue snapshot and clear it so it's offered only once. */
-export async function readAndClearRescue(): Promise<RescueSnapshot | null> {
+/**
+ * Read a pending rescue snapshot, without consuming it. The caller decides
+ * when to call `clearRescue()` — only after the user has answered the
+ * restore prompt, so a decline (or the app dying while the prompt is up)
+ * can't destroy the only copy of the crash's unsaved work.
+ */
+export async function readRescue(): Promise<RescueSnapshot | null> {
   try {
     const fromLs = localStorage.getItem(LS_KEY);
-    if (fromLs) {
-      localStorage.removeItem(LS_KEY);
-      return JSON.parse(fromLs) as RescueSnapshot;
-    }
-    const path = await rescuePath();
-    const raw = await invoke<string>("read_text_file", { path });
+    if (fromLs) return JSON.parse(fromLs) as RescueSnapshot;
+    const raw = await invoke<string>("read_text_file", { path: await rescuePath() });
     const snap = JSON.parse(raw) as RescueSnapshot | null;
-    if (snap) {
-      // "null" marks the snapshot as consumed (there is no delete command,
-      // and an empty file would just be a parse error on the next read).
-      await invoke("write_text_file", { path, contents: "null" });
-    }
     return snap && Array.isArray(snap.tabs) ? snap : null;
   } catch {
     return null; // no rescue file — the normal case
+  }
+}
+
+/** Consume the pending rescue snapshot so it's offered only once. */
+export async function clearRescue(): Promise<void> {
+  localStorage.removeItem(LS_KEY);
+  try {
+    await invoke("remove_file", { path: await rescuePath() });
+  } catch {
+    /* best-effort — a missing/unwritable rescue file is not fatal */
   }
 }
