@@ -23,15 +23,14 @@ import * as citationStore from "./lib/citationStore";
 import { readAndClearRescue, registerRescueProvider } from "./lib/rescue";
 import { DocTemplate, applyTemplateContent } from "./lib/templates";
 import {
-  DocFormat,
   baseName,
   openDocument,
   openDocumentPath,
   saveDocumentAs,
-  saveDocumentTo,
 } from "./lib/document";
-import { EMPTY_DOC, SaveStatus, newTab, tabTitle } from "./lib/tabs";
+import { EMPTY_DOC, newTab, tabTitle } from "./lib/tabs";
 import { useDocumentTabs } from "./hooks/useDocumentTabs";
+import { useAutosave } from "./hooks/useAutosave";
 import {
   Recent,
   Settings,
@@ -112,15 +111,24 @@ function App() {
     openDocFile,
     closeTab,
   } = useDocumentTabs(editorRef, {
-    // Invoked at event time, so referencing queueSave/cancelAutosave (declared
-    // below) is safe — they exist before any switch/close can happen.
+    // Invoked at event time, so referencing the autosave api (declared below)
+    // is safe — it exists before any switch/close can happen.
     onLeaveDirtyTab: (tab, html) => {
       cancelAutosave();
-      queueSave(tab, html).catch(() => {});
+      queueSave(tab, html).catch(() => {}); // failure shows in the status bar
     },
-    onCloseTab: (id) => editSeq.current.delete(id),
+    onCloseTab: (id) => forgetTab(id),
     onOpened: (path) => remember(path),
   });
+
+  const {
+    status: saveStatus,
+    queueSave,
+    schedule: scheduleAutosave,
+    cancel: cancelAutosave,
+    noteEdit,
+    forgetTab,
+  } = useAutosave({ editorRef, tabsRef, activeIdRef, setTabs });
 
   const [settings, setSettings] = useState<Settings>(() => loadSettings());
   const [recents, setRecents] = useState<Recent[]>(() => loadRecents());
@@ -187,58 +195,11 @@ function App() {
 
   const remember = useCallback((path: string) => setRecents(addRecent(path)), []);
 
-  // Monotonic edit counter per tab: a finished save only clears `dirty` when
-  // no edit happened while the write was in flight.
-  const editSeq = useRef(new Map<string, number>());
-
   const markDirty = useCallback(() => {
     const id = activeIdRef.current;
-    editSeq.current.set(id, (editSeq.current.get(id) ?? 0) + 1);
+    noteEdit(id);
     markTabDirty(id);
-  }, [activeIdRef, markTabDirty]);
-
-  // Debounced autosave: only writes when you pause typing (zero cost while typing),
-  // and never loses more than a couple seconds of work. `scheduleRef` always points
-  // to the latest scheduler so the editor's onUpdate can call it.
-  const scheduleRef = useRef<() => void>(() => {});
-  const autosaveTimer = useRef<number | null>(null);
-  const firstDirtyAt = useRef(0);
-
-  const [saveStatus, setSaveStatus] = useState<SaveStatus>({ kind: "idle" });
-
-  // Every disk write of a tab goes through this chain, so two writes to the
-  // same file can never interleave (autosave, switch-tab save, manual save).
-  const saveChain = useRef<Promise<unknown>>(Promise.resolve());
-
-  const queueSave = useCallback(
-    (tab: { id: string; filePath: string; format: DocFormat }, html: string): Promise<void> => {
-      const seq = editSeq.current.get(tab.id) ?? 0;
-      const job = saveChain.current.then(async () => {
-        setSaveStatus({ kind: "saving" });
-        try {
-          await saveDocumentTo(tab.filePath, html, tab.format);
-        } catch (e) {
-          setSaveStatus({ kind: "error", message: String(e), at: Date.now() });
-          throw e;
-        }
-        setSaveStatus({ kind: "saved", at: Date.now() });
-        if ((editSeq.current.get(tab.id) ?? 0) === seq) {
-          setTabs((ts) => ts.map((t) => (t.id === tab.id ? { ...t, dirty: false } : t)));
-        }
-      });
-      saveChain.current = job.catch(() => {}); // a failed save must not block the next one
-      return job;
-    },
-    []
-  );
-
-  const cancelAutosave = useCallback(() => {
-    if (autosaveTimer.current) {
-      clearTimeout(autosaveTimer.current);
-      autosaveTimer.current = null;
-    }
-    firstDirtyAt.current = 0;
-  }, []);
+  }, [activeIdRef, noteEdit, markTabDirty]);
 
   const editor = useEditor({
     extensions: buildExtensions(),
@@ -246,7 +207,7 @@ function App() {
     autofocus: true,
     onUpdate: () => {
       markDirty();
-      scheduleRef.current();
+      scheduleAutosave();
     },
   });
   editorRef.current = editor;
@@ -624,48 +585,6 @@ function App() {
     return () => {
       cancelled = true;
       unlisten?.();
-    };
-  }, []);
-
-  // ---- Debounced autosave (only when idle; never while actively typing) ----
-  const doAutosaveRef = useRef<() => void>(() => {});
-  const doAutosave = useCallback(() => {
-    autosaveTimer.current = null;
-    firstDirtyAt.current = 0;
-    if (!editor) return;
-    const at = tabsRef.current.find((t) => t.id === activeIdRef.current);
-    if (at && at.filePath && at.dirty) {
-      queueSave({ id: at.id, filePath: at.filePath, format: at.format }, editor.getHTML()).catch(() => {
-        // The tab stays dirty and the status bar shows the failure; retry with
-        // backoff so a transient error (file lock, cloud sync) heals itself.
-        if (!autosaveTimer.current) {
-          autosaveTimer.current = window.setTimeout(() => doAutosaveRef.current(), 30_000);
-        }
-      });
-    }
-  }, [editor, queueSave]);
-  doAutosaveRef.current = doAutosave;
-
-  const scheduleAutosave = useCallback(() => {
-    const at = tabsRef.current.find((t) => t.id === activeIdRef.current);
-    if (!at || !at.filePath) return;
-    const now = Date.now();
-    if (firstDirtyAt.current === 0) firstDirtyAt.current = now;
-    if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
-    if (now - firstDirtyAt.current >= 60000) {
-      doAutosave();
-      return;
-    }
-    // pandoc-converted formats are heavier to write; give them a longer pause.
-    const delay = at.format === "markdown" || at.format === "html" ? 2000 : 4000;
-    autosaveTimer.current = window.setTimeout(doAutosave, delay);
-  }, [doAutosave]);
-
-  scheduleRef.current = scheduleAutosave;
-
-  useEffect(() => {
-    return () => {
-      if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
     };
   }, []);
 
