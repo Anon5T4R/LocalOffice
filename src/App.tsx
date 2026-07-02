@@ -25,6 +25,7 @@ import { EMPTY_DOC, newTab } from "./lib/tabs";
 import { useDocumentTabs } from "./hooks/useDocumentTabs";
 import { useAutosave } from "./hooks/useAutosave";
 import { useFileOperations } from "./hooks/useFileOperations";
+import { useZoom } from "./hooks/useZoom";
 import {
   Recent,
   Settings,
@@ -101,6 +102,9 @@ function App() {
   }, []);
 
   const remember = useCallback((path: string) => setRecents(addRecent(path)), []);
+
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const { setZoomAbs, adjustZoom } = useZoom(scrollRef, updateSettings);
 
   const {
     tabs,
@@ -412,17 +416,6 @@ function App() {
     [updateSettings]
   );
 
-  // ---- Zoom (50–200%) ----
-  const setZoomAbs = useCallback(
-    (z: number) => updateSettings({ zoom: Math.min(200, Math.max(50, Math.round(z))) }),
-    [updateSettings]
-  );
-  // Read the freshest value from storage so keyboard/wheel steps never go stale.
-  const adjustZoom = useCallback(
-    (delta: number) => setZoomAbs((loadSettings().zoom || 100) + delta),
-    [setZoomAbs]
-  );
-
   // ---- Templates ----
   const handleApplyTemplate = useCallback(
     (tmpl: DocTemplate) => {
@@ -597,20 +590,6 @@ function App() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [handleSave, handleSaveAs, handleOpen, newBlankTab, closeTab, adjustZoom, setZoomAbs]);
-
-  // ---- Ctrl+scroll to zoom (native listener so preventDefault isn't passive) ----
-  const scrollRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const onWheel = (e: WheelEvent) => {
-      if (!e.ctrlKey) return;
-      e.preventDefault();
-      adjustZoom(e.deltaY < 0 ? 10 : -10);
-    };
-    el.addEventListener("wheel", onWheel, { passive: false });
-    return () => el.removeEventListener("wheel", onWheel);
-  }, [adjustZoom]);
 
   const pageStyle = useMemo(() => {
     const style: Record<string, string> = {
