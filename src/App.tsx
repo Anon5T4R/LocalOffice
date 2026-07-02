@@ -26,6 +26,7 @@ import { useCitationRegistry } from "./hooks/useCitationRegistry";
 import { useGhostPages } from "./hooks/useGhostPages";
 import { useAppLifecycle } from "./hooks/useAppLifecycle";
 import { useSettings } from "./state/SettingsContext";
+import { EditorProvider } from "./state/EditorContext";
 import "./App.css";
 
 const PAGE_DIMS: Record<string, { width: string; height: string; pxHeight: number }> = {
@@ -278,53 +279,50 @@ function App() {
         onVersionHistory={() => setShowVersionHistory((v) => !v)}
       />
       <TabStrip tabs={tabs} activeId={activeId} onSelect={switchTab} onClose={closeTab} onNew={newBlankTab} />
-      {editor && (
-        <Ribbon editor={editor} onInsertImage={handleInsertImage} onApplyTemplate={handleApplyTemplate} />
-      )}
-      {editor && <AiBubbleMenu editor={editor} ai={ai} onOpenPanel={() => setAiOpen(true)} />}
-      <div className="workspace">
-        {chaptersOpen && editor && <ChaptersPanel editor={editor} onClose={() => setChaptersOpen(false)} />}
-        {reviewOpen && editor && <ReviewPanel editor={editor} onClose={() => setReviewOpen(false)} />}
-        <div className="editor-main">
-          <div className="editor-scroll" ref={scrollRef}>
-            {showSearch && editor && <SearchBar editor={editor} onClose={() => setShowSearch(false)} />}
-            <div className={`pages-container${isPaginated ? " paginated" : ""}`} style={{ zoom: zoomFactor }}>
-              <div className={`page${isPaginated ? " fixed" : ""}`} style={pageStyle}>
-                {isPaginated ? (
-                  <div className="page-clip">
-                    <EditorContent editor={editor} />
-                  </div>
-                ) : (
-                  <EditorContent editor={editor} />
-                )}
-              </div>
-              {isPaginated &&
-                ghostPages.map((pg, i) => (
-                  // Same padding/width as the editable page (via pageStyle) so the
-                  // mirror reflows identically — otherwise offsets don't line up.
-                  <div key={i} className="page fixed" style={pageStyle}>
-                    <div className="page-clip" style={{ height: pg.height }}>
-                      <div
-                        className="page-ghost ProseMirror"
-                        style={{ transform: `translateY(-${pg.top}px)` }}
-                        dangerouslySetInnerHTML={{ __html: ghostHtml }}
-                      />
+      <EditorProvider editor={editor}>
+        <Ribbon onInsertImage={handleInsertImage} onApplyTemplate={handleApplyTemplate} />
+        {editor && <AiBubbleMenu editor={editor} ai={ai} onOpenPanel={() => setAiOpen(true)} />}
+        <div className="workspace">
+          {chaptersOpen && <ChaptersPanel onClose={() => setChaptersOpen(false)} />}
+          {reviewOpen && <ReviewPanel onClose={() => setReviewOpen(false)} />}
+          <div className="editor-main">
+            <div className="editor-scroll" ref={scrollRef}>
+              {showSearch && <SearchBar onClose={() => setShowSearch(false)} />}
+              <div className={`pages-container${isPaginated ? " paginated" : ""}`} style={{ zoom: zoomFactor }}>
+                <div className={`page${isPaginated ? " fixed" : ""}`} style={pageStyle}>
+                  {isPaginated ? (
+                    <div className="page-clip">
+                      <EditorContent editor={editor} />
                     </div>
-                  </div>
-                ))}
+                  ) : (
+                    <EditorContent editor={editor} />
+                  )}
+                </div>
+                {isPaginated &&
+                  ghostPages.map((pg, i) => (
+                    // Same padding/width as the editable page (via pageStyle) so the
+                    // mirror reflows identically — otherwise offsets don't line up.
+                    <div key={i} className="page fixed" style={pageStyle}>
+                      <div className="page-clip" style={{ height: pg.height }}>
+                        <div
+                          className="page-ghost ProseMirror"
+                          style={{ transform: `translateY(-${pg.top}px)` }}
+                          dangerouslySetInnerHTML={{ __html: ghostHtml }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+              </div>
             </div>
-          </div>
-          {editor && (
             <StatusBar
-              editor={editor}
               onZoomChange={setZoomAbs}
               measuredPages={isPaginated ? ghostPages.length + 1 : undefined}
               saveStatus={saveStatus}
             />
-          )}
+          </div>
+          {aiOpen && <AiPanel editor={editor} ai={ai} onClose={() => setAiOpen(false)} />}
         </div>
-        {aiOpen && <AiPanel editor={editor} ai={ai} onClose={() => setAiOpen(false)} />}
-      </div>
+      </EditorProvider>
       {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
       {showVersionHistory && activeTab && (
         <VersionHistory

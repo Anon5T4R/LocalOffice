@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Editor, useEditorState } from "@tiptap/react";
 import { useSettings } from "../state/SettingsContext";
+import { useEditorInstance } from "../state/EditorContext";
 
 interface CommentItem {
   id: string;
@@ -22,7 +23,6 @@ interface ChangeItem {
 }
 
 interface ReviewPanelProps {
-  editor: Editor;
   onClose: () => void;
 }
 
@@ -79,7 +79,8 @@ function collectChanges(editor: Editor): ChangeItem[] {
   return out;
 }
 
-export function ReviewPanel({ editor, onClose }: ReviewPanelProps) {
+export function ReviewPanel({ onClose }: ReviewPanelProps) {
+  const editor = useEditorInstance();
   const { settings, updateSettings } = useSettings();
   const trackChanges = settings.trackChanges === true;
   const authorName = settings.authorName || "Autor";

@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { Editor, useEditorState } from "@tiptap/react";
+import { useEditorState } from "@tiptap/react";
 import { SaveStatus } from "../lib/tabs";
 import { useSettings } from "../state/SettingsContext";
+import { useEditorInstance } from "../state/EditorContext";
 
 const PAGE_HEIGHT_PX: Record<string, number> = {
   classic: 980,
@@ -19,7 +20,6 @@ function countWords(text: string): number {
 }
 
 interface StatusBarProps {
-  editor: Editor;
   onZoomChange: (z: number) => void;
   /** Exact count from the measured ghost pages; when absent we estimate. */
   measuredPages?: number;
@@ -27,7 +27,8 @@ interface StatusBarProps {
   saveStatus?: SaveStatus;
 }
 
-export function StatusBar({ editor, onZoomChange, measuredPages, saveStatus }: StatusBarProps) {
+export function StatusBar({ onZoomChange, measuredPages, saveStatus }: StatusBarProps) {
+  const editor = useEditorInstance();
   const { settings } = useSettings();
   const pageFormat = settings.pageFormat || "classic";
   const zoom = settings.zoom || 100;

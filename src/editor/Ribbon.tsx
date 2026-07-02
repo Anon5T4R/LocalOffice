@@ -4,6 +4,7 @@ import { Editor, useEditorState } from "@tiptap/react";
 import { PageFormat, PageMargins } from "../lib/settings";
 import { TEMPLATES, DocTemplate } from "../lib/templates";
 import { useSettings } from "../state/SettingsContext";
+import { useEditorInstance } from "../state/EditorContext";
 
 /** Rewrite the case of the current selection's text, preserving each run's marks. */
 function transformCase(editor: Editor, fn: (s: string) => string): void {
@@ -34,7 +35,6 @@ const CASE_FNS: Record<string, (s: string) => string> = {
 };
 
 interface RibbonProps {
-  editor: Editor;
   onInsertImage: () => void;
   onApplyTemplate: (tmpl: DocTemplate) => void;
 }
@@ -86,7 +86,8 @@ function currentMarginPreset(m: PageMargins): string {
   return "personalizado";
 }
 
-export function Ribbon({ editor, onInsertImage, onApplyTemplate }: RibbonProps) {
+export function Ribbon({ onInsertImage, onApplyTemplate }: RibbonProps) {
+  const editor = useEditorInstance();
   const { settings, updateSettings, systemFonts, importFont } = useSettings();
   const pageFormat = settings.pageFormat || "classic";
   const pageMargins: PageMargins = settings.pageMargins || MARGIN_PRESETS.normal;
