@@ -3,6 +3,7 @@ import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { HeaderFooterSpec, Theme, clearRecents } from "./lib/settings";
 import * as citationStore from "./lib/citationStore";
 import { useSettings } from "./state/SettingsContext";
+import { Modal } from "./components/Modal";
 
 const CSL_STYLE_OPTIONS = [
   { id: "abnt", name: "ABNT (autor-data)" },
@@ -62,14 +63,8 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   };
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <strong>Configurações</strong>
-          <button className="tb-btn" onClick={onClose} title="Fechar">✕</button>
-        </div>
-
-        <div className="modal-body">
+    <Modal title="Configurações" onClose={onClose}>
+      <div className="modal-body">
           <label className="ai-field">
             <span>Tema</span>
             <select value={settings.theme} onChange={(e) => onChange({ theme: e.target.value as Theme })}>
@@ -230,7 +225,6 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
             Sincronize seus documentos colocando-os numa pasta do Syncthing/OneDrive — o app não precisa saber.
           </p>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

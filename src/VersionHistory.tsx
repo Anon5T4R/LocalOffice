@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Tab } from "./lib/tabs";
+import { Modal } from "./components/Modal";
 
 interface VersionData {
   id: string;
@@ -70,14 +71,12 @@ export function VersionHistory({ tab, onClose, onSaveVersion, onRestoreVersion }
   );
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxHeight: "80vh", display: "flex", flexDirection: "column" }}>
-        <div className="modal-header">
-          <strong>Histórico de versões</strong>
-          <button className="tb-btn" onClick={onClose} title="Fechar">✕</button>
-        </div>
-
-        <div className="modal-body" style={{ flex: 1, overflow: "auto", gap: "10px" }}>
+    <Modal
+      title="Histórico de versões"
+      onClose={onClose}
+      boxStyle={{ maxHeight: "80vh", display: "flex", flexDirection: "column" }}
+    >
+      <div className="modal-body" style={{ flex: 1, overflow: "auto", gap: "10px" }}>
           {!tab.filePath && (
             <p className="modal-note">Salve o documento para poder criar versões.</p>
           )}
@@ -140,7 +139,6 @@ export function VersionHistory({ tab, onClose, onSaveVersion, onRestoreVersion }
             </div>
           ))}
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

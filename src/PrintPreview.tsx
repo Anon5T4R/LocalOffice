@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { PrintOptions, cleanupPaged, printLegacy, renderPaged } from "./lib/pdf";
+import { useFocusTrap } from "./hooks/useFocusTrap";
 
 interface PrintPreviewProps {
   html: string;
@@ -20,7 +21,10 @@ type PreviewState =
  */
 export function PrintPreview({ html, options, onClose }: PrintPreviewProps) {
   const pagesRef = useRef<HTMLDivElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
   const [state, setState] = useState<PreviewState>({ status: "rendering" });
+
+  useFocusTrap(rootRef);
 
   useEffect(() => {
     const container = pagesRef.current;
@@ -58,7 +62,7 @@ export function PrintPreview({ html, options, onClose }: PrintPreviewProps) {
   };
 
   return createPortal(
-    <div className="print-preview" role="dialog" aria-label="Visualizar impressão">
+    <div ref={rootRef} className="print-preview" role="dialog" aria-modal="true" aria-label="Visualizar impressão">
       <div className="print-preview-toolbar">
         <strong>Visualizar impressão</strong>
         <span className="print-preview-info">
