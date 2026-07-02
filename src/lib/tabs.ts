@@ -1,5 +1,6 @@
 import type { JSONContent } from "@tiptap/core";
 import { DocFormat, baseName } from "./document";
+import { newId } from "./id";
 
 export interface Tab {
   id: string;
@@ -19,11 +20,9 @@ export type SaveStatus =
   | { kind: "saved"; at: number }
   | { kind: "error"; message: string; at: number };
 
-let counter = 0;
 export function newTab(partial: Partial<Tab> = {}): Tab {
-  counter += 1;
   return {
-    id: `tab-${Date.now()}-${counter}`,
+    id: newId("tab-"),
     filePath: null,
     format: "markdown",
     dirty: false,

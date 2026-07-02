@@ -2,6 +2,7 @@ import { Node, mergeAttributes } from "@tiptap/core";
 import { Plugin, PluginKey, TextSelection } from "@tiptap/pm/state";
 import type { Node as PMNode } from "@tiptap/pm/model";
 import { MAINTENANCE_META } from "./maintenanceMeta";
+import { newId } from "../lib/id";
 
 declare module "@tiptap/core" {
   interface Commands<ReturnType> {
@@ -23,10 +24,6 @@ declare module "@tiptap/core" {
  */
 
 const key = new PluginKey("footnotes-maintenance");
-
-function newId(): string {
-  return `fn-${Math.random().toString(36).slice(2, 9)}`;
-}
 
 /** Reference marker rendered as <sup data-fn-ref="id">; the number is CSS-driven. */
 export const FootnoteRef = Node.create({
@@ -50,7 +47,7 @@ export const FootnoteRef = Node.create({
     // point the ref anchor at "#<noteId>", so we take the id from the href.
     const fromHref = (el: HTMLElement) => {
       const href = el.getAttribute("href") || "";
-      return { id: href.replace(/^#/, "") || el.getAttribute("id") || newId() };
+      return { id: href.replace(/^#/, "") || el.getAttribute("id") || newId("fn-") };
     };
     return [
       // Priority must beat the Superscript mark's generic `sup` rule (50), or it
@@ -137,7 +134,7 @@ export const Footnotes = Node.create({
           });
           if (insideNotes) return false;
 
-          const id = newId();
+          const id = newId("fn-");
           const tr = state.tr;
 
           // 1. Insert the reference after the current selection.
