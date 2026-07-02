@@ -28,6 +28,7 @@ import { SlashCommand } from "./slash/SlashCommand";
 import { loadSettings } from "../lib/settings";
 import { SearchExtension } from "./search/SearchExtension";
 import { PageBreak } from "./PageBreak";
+import { PageBreaks } from "./PageBreaks";
 import { FontSize } from "./FontSize";
 import { LetterSpacing } from "./LetterSpacing";
 import { LineHeight } from "./LineHeight";
@@ -83,6 +84,7 @@ export function buildExtensions() {
       getAuthor: () => loadSettings().authorName || "Autor",
     }),
     PageBreak,
+    PageBreaks,
     SlashCommand,
     SearchExtension,
     DocLayoutExtension,

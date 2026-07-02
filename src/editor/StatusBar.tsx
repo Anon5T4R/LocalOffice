@@ -3,6 +3,7 @@ import { useEditorState } from "@tiptap/react";
 import { estimatePages } from "../lib/pageGeometry";
 import { getTabSaveStatus, subscribeTabSaveStatus } from "../lib/saveStatusStore";
 import { effectiveLayout } from "./DocLayout";
+import { getPageCount } from "./PageBreaks";
 import { useSettings } from "../state/SettingsContext";
 import { useEditorInstance } from "../state/EditorContext";
 
@@ -27,14 +28,12 @@ export function StatusBar({ onZoomChange, activeTabId }: StatusBarProps) {
   const { pageFormat, pageMargins: margins } = effectiveLayout(editor.state.doc, settings);
   const zoom = settings.zoom || 100;
   const wordGoal = settings.wordGoal || 0;
-  const { words, chars, charsNoSpaces, paragraphs, breaks, selWords, selChars } = useEditorState({
+  const { words, chars, charsNoSpaces, paragraphs, pageBreakPages, selWords, selChars } = useEditorState({
     editor,
     selector: ({ editor }) => {
       const text = editor.getText();
-      let breaks = 0;
       let paragraphs = 0;
       editor.state.doc.descendants((n) => {
-        if (n.type.name === "pageBreak") breaks += 1;
         if ((n.type.name === "paragraph" || n.type.name === "heading") && n.textContent.trim()) paragraphs += 1;
       });
       const { from, to, empty } = editor.state.selection;
@@ -44,7 +43,11 @@ export function StatusBar({ onZoomChange, activeTabId }: StatusBarProps) {
         chars: text.replace(/\n/g, "").length,
         charsNoSpaces: text.replace(/\s/g, "").length,
         paragraphs,
-        breaks,
+        // Authoritative for paginated formats: the exact count the page-gap
+        // decorations were drawn from (editor/PageBreaks.ts). "classic" has
+        // no fixed page height, so this is always 1 there -- heightPages
+        // below (scrollHeight/printable) is what classic actually uses.
+        pageBreakPages: getPageCount(editor.state),
         selWords: countWords(selText),
         selChars: selText.replace(/\n/g, "").length,
       };
@@ -59,7 +62,9 @@ export function StatusBar({ onZoomChange, activeTabId }: StatusBarProps) {
     // el.scrollHeight is measured inside the ancestor that carries the CSS
     // `zoom` (App.tsx's .pages-container) and scales with it in this
     // WebView — estimatePages compensates so the count doesn't change
-    // just because the user zoomed in or out.
+    // just because the user zoomed in or out. Only actually used for
+    // "classic" (see `pages` below) -- scrollHeight includes the page-gap
+    // decorations' own height for paginated formats, which would overcount.
     const measure = () => setHeightPages(estimatePages(el.scrollHeight, pageFormat, margins, zoomFactor));
     measure();
     const ro = new ResizeObserver(measure);
@@ -67,7 +72,7 @@ export function StatusBar({ onZoomChange, activeTabId }: StatusBarProps) {
     return () => ro.disconnect();
   }, [editor, pageFormat, margins, zoomFactor]);
 
-  const pages = Math.max(heightPages, breaks + 1);
+  const pages = pageFormat === "classic" ? heightPages : pageBreakPages;
   const readMin = Math.max(1, Math.round(words / WORDS_PER_MINUTE));
 
   return (
