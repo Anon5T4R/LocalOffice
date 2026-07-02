@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Review data (comments, tracked changes) <-> pandoc's docx representation.
  *
  * pandoc's docx writer turns spans with class comment-start/comment-end into

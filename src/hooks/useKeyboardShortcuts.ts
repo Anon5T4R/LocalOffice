@@ -1,4 +1,5 @@
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
+import { useLatest } from "./useLatest";
 
 export interface ShortcutHandlers {
   save: () => void;
@@ -19,8 +20,7 @@ export interface ShortcutHandlers {
  * listener is registered exactly once and never re-bound on re-renders.
  */
 export function useKeyboardShortcuts(handlers: ShortcutHandlers): void {
-  const ref = useRef(handlers);
-  ref.current = handlers;
+  const ref = useLatest(handlers);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

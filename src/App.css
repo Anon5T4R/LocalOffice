@@ -8,7 +8,6 @@
   --accent-soft: #dbeafe;
   --page-max: 760px;
   --page-width: var(--page-max);
-  --page-height: auto;
   --page-margin-top: 56px;
   --page-margin-bottom: 56px;
   --page-margin-left: 72px;
@@ -494,6 +493,10 @@ body {
 
 .status-saving {
   opacity: 0.7;
+}
+
+.status-saved {
+  opacity: 0.6;
 }
 
 .status-zoom {
@@ -1114,7 +1117,6 @@ body {
 }
 
 .page.fixed {
-  overflow: visible;
   position: relative;
 }
 
