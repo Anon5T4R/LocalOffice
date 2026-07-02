@@ -16,21 +16,15 @@ import { AiBubbleMenu } from "./ai/AiBubbleMenu";
 import { useLocalAi } from "./ai/useLocalAi";
 import { SettingsModal } from "./SettingsModal";
 import { VersionHistory } from "./VersionHistory";
-import { pickImageDataUri } from "./lib/images";
-import { PrintOptions } from "./lib/pdf";
 import { PrintPreview } from "./PrintPreview";
 import * as citationStore from "./lib/citationStore";
 import { readAndClearRescue, registerRescueProvider } from "./lib/rescue";
 import { DocTemplate, applyTemplateContent } from "./lib/templates";
-import {
-  baseName,
-  openDocument,
-  openDocumentPath,
-  saveDocumentAs,
-} from "./lib/document";
-import { EMPTY_DOC, newTab, tabTitle } from "./lib/tabs";
+import { openDocumentPath } from "./lib/document";
+import { EMPTY_DOC, newTab } from "./lib/tabs";
 import { useDocumentTabs } from "./hooks/useDocumentTabs";
 import { useAutosave } from "./hooks/useAutosave";
+import { useFileOperations } from "./hooks/useFileOperations";
 import {
   Recent,
   Settings,
@@ -97,6 +91,17 @@ function measurePageOffsets(el: HTMLElement, pageH: number): number[] {
 function App() {
   const editorRef = useRef<Editor | null>(null);
 
+  const [settings, setSettings] = useState<Settings>(() => loadSettings());
+  const [recents, setRecents] = useState<Recent[]>(() => loadRecents());
+
+  const updateSettings = useCallback((patch: Partial<Settings>) => {
+    const next = saveSettings(patch);
+    setSettings(next);
+    if (patch.theme) applyTheme(patch.theme);
+  }, []);
+
+  const remember = useCallback((path: string) => setRecents(addRecent(path)), []);
+
   const {
     tabs,
     setTabs,
@@ -118,7 +123,7 @@ function App() {
       queueSave(tab, html).catch(() => {}); // failure shows in the status bar
     },
     onCloseTab: (id) => forgetTab(id),
-    onOpened: (path) => remember(path),
+    onOpened: remember,
   });
 
   const {
@@ -130,8 +135,26 @@ function App() {
     forgetTab,
   } = useAutosave({ editorRef, tabsRef, activeIdRef, setTabs });
 
-  const [settings, setSettings] = useState<Settings>(() => loadSettings());
-  const [recents, setRecents] = useState<Recent[]>(() => loadRecents());
+  const {
+    handleOpen,
+    handleOpenRecent,
+    handleSave,
+    handleSaveAs,
+    handleInsertImage,
+    handleExportPdf,
+    printJob,
+    setPrintJob,
+  } = useFileOperations({
+    editorRef,
+    tabsRef,
+    activeIdRef,
+    setTabs,
+    openDocFile,
+    queueSave,
+    cancelAutosave,
+    remember,
+  });
+
   const [showSettings, setShowSettings] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   const [chaptersOpen, setChaptersOpen] = useState(false);
@@ -139,7 +162,6 @@ function App() {
   const [focusMode, setFocusMode] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [showVersionHistory, setShowVersionHistory] = useState(false);
-  const [printJob, setPrintJob] = useState<{ html: string; options: PrintOptions } | null>(null);
   const [systemFonts, setSystemFonts] = useState<string[]>([]);
   // Each ghost mirrors one printed page: `top` is the content offset where the
   // page starts, `height` the slice it shows (so the next page's first block
@@ -186,14 +208,6 @@ function App() {
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  const updateSettings = useCallback((patch: Partial<Settings>) => {
-    const next = saveSettings(patch);
-    setSettings(next);
-    if (patch.theme) applyTheme(patch.theme);
-  }, []);
-
-  const remember = useCallback((path: string) => setRecents(addRecent(path)), []);
 
   const markDirty = useCallback(() => {
     const id = activeIdRef.current;
@@ -359,88 +373,6 @@ function App() {
         editor.commands.setContent(restored[idx].doc, { emitUpdate: false });
       })
       .catch(() => {});
-  }, [editor]);
-
-  // ---- File operations ----
-
-  const handleOpen = useCallback(async () => {
-    try {
-      const doc = await openDocument();
-      if (doc) openDocFile(doc);
-    } catch (e) {
-      window.alert(`Não foi possível abrir:\n${e}`);
-    }
-  }, [openDocFile]);
-
-  const handleOpenRecent = useCallback(
-    async (path: string) => {
-      try {
-        openDocFile(await openDocumentPath(path));
-      } catch (e) {
-        window.alert(`Não foi possível abrir:\n${e}`);
-      }
-    },
-    [openDocFile]
-  );
-
-  const handleSaveAs = useCallback(async () => {
-    if (!editor) return;
-    const at = tabsRef.current.find((t) => t.id === activeIdRef.current);
-    const suggested = at?.filePath ? baseName(at.filePath) : "sem-titulo.md";
-    try {
-      const doc = await saveDocumentAs(editor.getHTML(), suggested);
-      if (doc) {
-        const id = activeIdRef.current;
-        setTabs((ts) => ts.map((t) => (t.id === id ? { ...t, filePath: doc.path, format: doc.format, dirty: false } : t)));
-        remember(doc.path);
-        cancelAutosave();
-      }
-    } catch (e) {
-      window.alert(`Não foi possível salvar:\n${e}`);
-    }
-  }, [editor, remember, cancelAutosave]);
-
-  const handleSave = useCallback(async () => {
-    if (!editor) return;
-    const at = tabsRef.current.find((t) => t.id === activeIdRef.current);
-    if (!at) return;
-    if (!at.filePath) {
-      await handleSaveAs();
-      return;
-    }
-    try {
-      await queueSave({ id: at.id, filePath: at.filePath, format: at.format }, editor.getHTML());
-      remember(at.filePath);
-      cancelAutosave();
-    } catch (e) {
-      window.alert(`Não foi possível salvar:\n${e}`);
-    }
-  }, [editor, handleSaveAs, remember, cancelAutosave, queueSave]);
-
-  const handleInsertImage = useCallback(async () => {
-    if (!editor) return;
-    const dataUri = await pickImageDataUri();
-    if (dataUri) editor.chain().focus().setImage({ src: dataUri }).run();
-  }, [editor]);
-
-  // Snapshot the document and settings at click time; the preview modal
-  // paginates that snapshot and prints exactly what it shows.
-  const handleExportPdf = useCallback(() => {
-    if (!editor) return;
-    const at = tabsRef.current.find((t) => t.id === activeIdRef.current);
-    const s = loadSettings();
-    setPrintJob({
-      html: editor.getHTML(),
-      options: {
-        title: at ? tabTitle(at) : "Documento",
-        pageFormat: s.pageFormat || "a4",
-        margins: s.pageMargins,
-        header: s.pageHeader,
-        footer: s.pageFooter,
-        chromeOnFirst: s.pageChromeOnFirst !== false,
-        numberHeadings: s.numberHeadings === true,
-      },
-    });
   }, [editor]);
 
   // ---- Font import ----
