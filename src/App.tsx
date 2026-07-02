@@ -3,7 +3,7 @@ import { useEditor, EditorContent, type Editor } from "@tiptap/react";
 import { invoke } from "@tauri-apps/api/core";
 import { buildExtensions } from "./editor/extensions";
 import { MenuBar } from "./editor/MenuBar";
-import { Ribbon } from "./editor/Ribbon";
+import { Ribbon } from "./editor/ribbon/Ribbon";
 import { TabStrip } from "./editor/TabStrip";
 import { SearchBar } from "./editor/search/SearchBar";
 import { ChaptersPanel } from "./editor/ChaptersPanel";
