@@ -253,13 +253,25 @@ function buildPrintCss(opts: PrintOptions): string {
     }
     ${firstPage}
 
+    /* Content typography MUST mirror the editor's .ProseMirror rules (App.css)
+       exactly, or the PDF paginates differently from the on-screen page
+       preview: line-height and inter-block spacing are what drive vertical
+       fill, so any drift here re-opens the gap between the editor's computed
+       page breaks and paged.js's. (16px == 12pt at 96dpi; kept in px to match
+       the editor verbatim.) */
     .print-content {
-      font-size: 12pt;
-      line-height: 1.5;
+      font-size: 16px;
+      line-height: 1.7;
       color: #000;
       overflow-wrap: anywhere;
     }
-    .print-content img { max-width: 100%; }
+    .print-content > * + * { margin-top: 0.75em; }
+    .print-content h1 { font-size: 1.9em; line-height: 1.25; margin-top: 1.2em; }
+    .print-content h2 { font-size: 1.5em; margin-top: 1.1em; }
+    .print-content h3 { font-size: 1.2em; margin-top: 1em; }
+    .print-content ul, .print-content ol { padding-left: 1.4em; }
+    .print-content blockquote { border-left: 3px solid #999; margin-left: 0; padding-left: 1em; }
+    .print-content img { max-width: 100%; margin: 0.5em 0; }
     .print-content table { border-collapse: collapse; width: 100%; }
     .print-content th, .print-content td { border: 1px solid #999; padding: 4px 8px; }
     .print-content [data-page-break] { break-after: page; border: none; height: 0; margin: 0; }
