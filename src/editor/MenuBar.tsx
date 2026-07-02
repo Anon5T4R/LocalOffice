@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { Recent } from "../lib/settings";
+import { useSettings } from "../state/SettingsContext";
 
 interface MenuBarProps {
   aiOpen: boolean;
   chaptersOpen: boolean;
   reviewOpen: boolean;
-  recents: Recent[];
   onOpen: () => void;
   onSave: () => void;
   onSaveAs: () => void;
@@ -61,7 +61,6 @@ export function MenuBar({
   aiOpen,
   chaptersOpen,
   reviewOpen,
-  recents,
   onOpen,
   onSave,
   onSaveAs,
@@ -74,6 +73,7 @@ export function MenuBar({
   onExportPdf,
   onVersionHistory,
 }: MenuBarProps) {
+  const { recents } = useSettings();
   return (
     <div className="menubar">
       <span className="brand">LocalOffice</span>

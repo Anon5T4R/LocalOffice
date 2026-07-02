@@ -1,7 +1,8 @@
 import { useSyncExternalStore } from "react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
-import { HeaderFooterSpec, Settings, Theme, clearRecents } from "./lib/settings";
+import { HeaderFooterSpec, Theme, clearRecents } from "./lib/settings";
 import * as citationStore from "./lib/citationStore";
+import { useSettings } from "./state/SettingsContext";
 
 const CSL_STYLE_OPTIONS = [
   { id: "abnt", name: "ABNT (autor-data)" },
@@ -12,8 +13,6 @@ const CSL_STYLE_OPTIONS = [
 ];
 
 interface SettingsModalProps {
-  settings: Settings;
-  onChange: (patch: Partial<Settings>) => void;
   onClose: () => void;
 }
 
@@ -47,7 +46,8 @@ function HeaderFooterRow({
   );
 }
 
-export function SettingsModal({ settings, onChange, onClose }: SettingsModalProps) {
+export function SettingsModal({ onClose }: SettingsModalProps) {
+  const { settings, updateSettings: onChange } = useSettings();
   useSyncExternalStore(citationStore.subscribe, citationStore.getVersion);
   const bibError = citationStore.getError();
   const bibCount = citationStore.getItems().length;

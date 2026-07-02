@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import type { Mark } from "@tiptap/pm/model";
 import { Editor, useEditorState } from "@tiptap/react";
-import { PageFormat, PageMargins, CustomFont } from "../lib/settings";
+import { PageFormat, PageMargins } from "../lib/settings";
 import { TEMPLATES, DocTemplate } from "../lib/templates";
+import { useSettings } from "../state/SettingsContext";
 
 /** Rewrite the case of the current selection's text, preserving each run's marks. */
 function transformCase(editor: Editor, fn: (s: string) => string): void {
@@ -35,16 +36,7 @@ const CASE_FNS: Record<string, (s: string) => string> = {
 interface RibbonProps {
   editor: Editor;
   onInsertImage: () => void;
-  pageFormat: PageFormat;
-  onPageFormatChange: (format: PageFormat) => void;
-  pageMargins: PageMargins;
-  onMarginsChange: (margins: PageMargins) => void;
-  systemFonts: string[];
-  customFonts: CustomFont[];
-  onImportFont: () => void;
   onApplyTemplate: (tmpl: DocTemplate) => void;
-  numberHeadings: boolean;
-  onToggleHeadingNumbers: () => void;
 }
 
 function Btn({
@@ -94,20 +86,13 @@ function currentMarginPreset(m: PageMargins): string {
   return "personalizado";
 }
 
-export function Ribbon({
-  editor,
-  onInsertImage,
-  pageFormat,
-  onPageFormatChange,
-  pageMargins,
-  onMarginsChange,
-  systemFonts,
-  customFonts,
-  onImportFont,
-  onApplyTemplate,
-  numberHeadings,
-  onToggleHeadingNumbers,
-}: RibbonProps) {
+export function Ribbon({ editor, onInsertImage, onApplyTemplate }: RibbonProps) {
+  const { settings, updateSettings, systemFonts, importFont } = useSettings();
+  const pageFormat = settings.pageFormat || "classic";
+  const pageMargins: PageMargins = settings.pageMargins || MARGIN_PRESETS.normal;
+  const customFonts = settings.customFonts || [];
+  const numberHeadings = settings.numberHeadings === true;
+
   const [tab, setTab] = useState<"inicio" | "inserir" | "layout">("inicio");
   const [painterMarks, setPainterMarks] = useState<readonly Mark[] | null>(null);
 
@@ -242,7 +227,7 @@ export function Ribbon({
               ))}
             </select>
             <Btn onClick={() => chain().unsetFontFamily().run()} title="Fonte padrão" disabled={!s.fontFamily}>↺</Btn>
-            <Btn onClick={onImportFont} title="Importar fonte">+F</Btn>
+            <Btn onClick={importFont} title="Importar fonte">+F</Btn>
           </div>
           <div className="tb-group">
             <div className="tb-size-wrap">
@@ -415,7 +400,7 @@ export function Ribbon({
             <select
               className="tb-btn tb-select"
               value={pageFormat}
-              onChange={(e) => onPageFormatChange(e.target.value as PageFormat)}
+              onChange={(e) => updateSettings({ pageFormat: e.target.value as PageFormat })}
               title="Formato de página"
             >
               <option value="classic">Clássica (infinito)</option>
@@ -433,7 +418,7 @@ export function Ribbon({
               value={currentMarginPreset(pageMargins)}
               onChange={(e) => {
                 const preset = MARGIN_PRESETS[e.target.value];
-                if (preset) onMarginsChange(preset);
+                if (preset) updateSettings({ pageMargins: preset });
               }}
               title="Margens da página"
             >
@@ -506,7 +491,7 @@ export function Ribbon({
 
           <div className="tb-group">
             <Btn
-              onClick={onToggleHeadingNumbers}
+              onClick={() => updateSettings({ numberHeadings: !numberHeadings })}
               active={numberHeadings}
               title="Numerar títulos automaticamente (1, 1.1, 1.1.1…)"
               wide

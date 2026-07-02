@@ -25,18 +25,7 @@ import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 import { useCitationRegistry } from "./hooks/useCitationRegistry";
 import { useGhostPages } from "./hooks/useGhostPages";
 import { useAppLifecycle } from "./hooks/useAppLifecycle";
-import { useCustomFonts } from "./hooks/useCustomFonts";
-import {
-  Recent,
-  Settings,
-  PageFormat,
-  PageMargins,
-  addRecent,
-  applyTheme,
-  loadRecents,
-  loadSettings,
-  saveSettings,
-} from "./lib/settings";
+import { useSettings } from "./state/SettingsContext";
 import "./App.css";
 
 const PAGE_DIMS: Record<string, { width: string; height: string; pxHeight: number }> = {
@@ -50,16 +39,7 @@ const PAGE_DIMS: Record<string, { width: string; height: string; pxHeight: numbe
 function App() {
   const editorRef = useRef<Editor | null>(null);
 
-  const [settings, setSettings] = useState<Settings>(() => loadSettings());
-  const [recents, setRecents] = useState<Recent[]>(() => loadRecents());
-
-  const updateSettings = useCallback((patch: Partial<Settings>) => {
-    const next = saveSettings(patch);
-    setSettings(next);
-    if (patch.theme) applyTheme(patch.theme);
-  }, []);
-
-  const remember = useCallback((path: string) => setRecents(addRecent(path)), []);
+  const { settings, updateSettings, remember } = useSettings();
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const { setZoomAbs, adjustZoom } = useZoom(scrollRef, updateSettings);
@@ -127,19 +107,10 @@ function App() {
 
   const pageFormat = settings.pageFormat || "classic";
   const pageMargins = settings.pageMargins || { top: 56, bottom: 56, left: 72, right: 72 };
-  const customFonts = settings.customFonts || [];
-  const zoom = settings.zoom || 100;
-  const zoomFactor = zoom / 100;
+  const zoomFactor = (settings.zoom || 100) / 100;
 
   const dims = PAGE_DIMS[pageFormat] || PAGE_DIMS.classic;
   const isPaginated = pageFormat !== "classic";
-
-  useEffect(() => {
-    applyTheme(settings.theme);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const { systemFonts, handleImportFont } = useCustomFonts(customFonts, updateSettings);
 
   const markDirty = useCallback(() => {
     const id = activeIdRef.current;
@@ -191,17 +162,6 @@ function App() {
   const ai = useLocalAi(editor, settings, updateSettings);
 
   useAppLifecycle({ editor, editorRef, tabsRef, activeIdRef, setTabs, setActiveId, openDocFile });
-
-  // ---- Page format / margins ----
-  const handlePageFormatChange = useCallback(
-    (format: PageFormat) => updateSettings({ pageFormat: format }),
-    [updateSettings]
-  );
-
-  const handleMarginsChange = useCallback(
-    (margins: PageMargins) => updateSettings({ pageMargins: margins }),
-    [updateSettings]
-  );
 
   // ---- Templates ----
   const handleApplyTemplate = useCallback(
@@ -305,7 +265,6 @@ function App() {
         aiOpen={aiOpen}
         chaptersOpen={chaptersOpen}
         reviewOpen={reviewOpen}
-        recents={recents}
         onNew={newBlankTab}
         onOpen={handleOpen}
         onSave={handleSave}
@@ -320,33 +279,12 @@ function App() {
       />
       <TabStrip tabs={tabs} activeId={activeId} onSelect={switchTab} onClose={closeTab} onNew={newBlankTab} />
       {editor && (
-        <Ribbon
-          editor={editor}
-          onInsertImage={handleInsertImage}
-          pageFormat={pageFormat}
-          onPageFormatChange={handlePageFormatChange}
-          pageMargins={pageMargins}
-          onMarginsChange={handleMarginsChange}
-          systemFonts={systemFonts}
-          customFonts={customFonts}
-          onImportFont={handleImportFont}
-          onApplyTemplate={handleApplyTemplate}
-          numberHeadings={settings.numberHeadings === true}
-          onToggleHeadingNumbers={() => updateSettings({ numberHeadings: !settings.numberHeadings })}
-        />
+        <Ribbon editor={editor} onInsertImage={handleInsertImage} onApplyTemplate={handleApplyTemplate} />
       )}
       {editor && <AiBubbleMenu editor={editor} ai={ai} onOpenPanel={() => setAiOpen(true)} />}
       <div className="workspace">
         {chaptersOpen && editor && <ChaptersPanel editor={editor} onClose={() => setChaptersOpen(false)} />}
-        {reviewOpen && editor && (
-          <ReviewPanel
-            editor={editor}
-            trackChanges={settings.trackChanges === true}
-            onToggleTrackChanges={() => updateSettings({ trackChanges: !settings.trackChanges })}
-            authorName={settings.authorName || "Autor"}
-            onClose={() => setReviewOpen(false)}
-          />
-        )}
+        {reviewOpen && editor && <ReviewPanel editor={editor} onClose={() => setReviewOpen(false)} />}
         <div className="editor-main">
           <div className="editor-scroll" ref={scrollRef}>
             {showSearch && editor && <SearchBar editor={editor} onClose={() => setShowSearch(false)} />}
@@ -379,21 +317,15 @@ function App() {
           {editor && (
             <StatusBar
               editor={editor}
-              pageFormat={pageFormat}
-              zoom={zoom}
-              zoomFactor={zoomFactor}
               onZoomChange={setZoomAbs}
               measuredPages={isPaginated ? ghostPages.length + 1 : undefined}
-              wordGoal={settings.wordGoal || 0}
               saveStatus={saveStatus}
             />
           )}
         </div>
         {aiOpen && <AiPanel editor={editor} ai={ai} onClose={() => setAiOpen(false)} />}
       </div>
-      {showSettings && (
-        <SettingsModal settings={settings} onChange={updateSettings} onClose={() => setShowSettings(false)} />
-      )}
+      {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
       {showVersionHistory && activeTab && (
         <VersionHistory
           tab={activeTab}
