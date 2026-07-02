@@ -20,6 +20,7 @@ import { pickImageDataUri } from "./lib/images";
 import { PrintOptions } from "./lib/pdf";
 import { PrintPreview } from "./PrintPreview";
 import * as citationStore from "./lib/citationStore";
+import { readAndClearRescue, registerRescueProvider } from "./lib/rescue";
 import { DocTemplate, applyTemplateContent } from "./lib/templates";
 import {
   DocFile,
@@ -338,6 +339,49 @@ function App() {
 
   // Local AI engine, shared by the side panel and the selection bubble menu.
   const ai = useLocalAi(editor, settings, updateSettings);
+
+  // Crash rescue: tell the ErrorBoundary how to snapshot the open tabs, and
+  // offer to restore a snapshot left behind by a previous crash.
+  useEffect(() => {
+    return registerRescueProvider(() => {
+      let activeDoc = null;
+      try {
+        activeDoc = editor?.getJSON() ?? null;
+      } catch {
+        activeDoc = null; // the crash reached the editor; fall back to the last swap
+      }
+      const activeId = activeIdRef.current;
+      return {
+        tabs: tabsRef.current.map((t) => ({
+          filePath: t.filePath,
+          format: t.format,
+          doc: t.id === activeId && activeDoc ? activeDoc : t.doc,
+        })),
+        activeIndex: Math.max(0, tabsRef.current.findIndex((t) => t.id === activeId)),
+        ts: Date.now(),
+      };
+    });
+  }, [editor]);
+
+  const rescueChecked = useRef(false);
+  useEffect(() => {
+    if (!editor || rescueChecked.current) return;
+    rescueChecked.current = true;
+    readAndClearRescue()
+      .then((snap) => {
+        if (!snap || !snap.tabs.length) return;
+        if (!window.confirm("O LocalOffice fechou de forma inesperada com documentos abertos.\nRestaurar a sessão anterior?")) return;
+        // Restored tabs are dirty on purpose: the snapshot may be newer than disk.
+        const restored = snap.tabs.map((t) =>
+          newTab({ filePath: t.filePath, format: t.format, doc: t.doc, dirty: true })
+        );
+        const idx = Math.min(Math.max(snap.activeIndex, 0), restored.length - 1);
+        setTabs(restored);
+        setActiveId(restored[idx].id);
+        editor.commands.setContent(restored[idx].doc, { emitUpdate: false });
+      })
+      .catch(() => {});
+  }, [editor]);
 
   // ---- Tab operations (single editor, content swap) ----
 
