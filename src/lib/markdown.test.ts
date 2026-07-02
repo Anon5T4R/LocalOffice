@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { htmlToMarkdown, markdownToHtml, stripFootnoteBackrefs } from "./markdown";
+import { htmlToMarkdown, markdownToHtml, mathFromPandoc, stripFootnoteBackrefs } from "./markdown";
 
 describe("markdownToHtml", () => {
   it("converte estrutura básica", async () => {
@@ -27,6 +27,25 @@ describe("markdownToHtml", () => {
     expect(html).not.toContain("data-citation");
     expect(html).toContain("<a");
   });
+
+  it("converte $latex$ em span data-math", async () => {
+    const html = await markdownToHtml("a fórmula $E=mc^2$ muda tudo");
+    expect(html).toContain('data-math=""');
+    expect(html).toContain('data-latex="E=mc^2"');
+  });
+
+  it("escapa HTML dentro do LaTeX", async () => {
+    const html = await markdownToHtml("$a<b$");
+    expect(html).toContain('data-latex="a&lt;b"');
+    expect(html).not.toContain("<b$");
+  });
+
+  it("não trata cifrão de moeda como math", async () => {
+    const html = await markdownToHtml("custa $50 e o outro $60, caro");
+    expect(html).not.toContain("data-math");
+    const html2 = await markdownToHtml("preço: $ 100$");
+    expect(html2).not.toContain("data-math");
+  });
 });
 
 describe("htmlToMarkdown", () => {
@@ -50,12 +69,76 @@ describe("htmlToMarkdown", () => {
     expect(md).toContain("[^1]: a nota");
   });
 
+  it("mantém legendas como HTML cru (com marcas inline)", () => {
+    const html = '<p data-caption="figure">um <em>gato</em></p>';
+    expect(htmlToMarkdown(html)).toContain('<p data-caption="figure">um <em>gato</em></p>');
+  });
+
+  it("faz roundtrip de legenda e lista de figuras via markdown", async () => {
+    const md = '<p data-caption="figure">um gato</p>\n\n<nav data-toc="figures"></nav>\n';
+    const html = await markdownToHtml(md);
+    expect(html).toContain('data-caption="figure"');
+    expect(html).toContain('data-toc="figures"');
+    const back = htmlToMarkdown(html);
+    expect(back).toContain('<p data-caption="figure">um gato</p>');
+    expect(back).toContain('<nav data-toc="figures"></nav>');
+  });
+
+  it("faz roundtrip de refId de título via {#id} e de span de referência", async () => {
+    const html =
+      '<h2 data-ref-id="ref-abc">Métodos</h2><p>ver <span data-crossref="ref-abc"></span> adiante</p>';
+    const md = htmlToMarkdown(html);
+    expect(md).toContain("## Métodos {#ref-abc}");
+    expect(md).toContain('<span data-crossref="ref-abc"></span>');
+    const back = await markdownToHtml(md);
+    expect(back).toContain('data-ref-id="ref-abc"');
+    expect(back).not.toContain("{#ref-abc}");
+    expect(back).toContain('data-crossref="ref-abc"');
+  });
+
+  it("título sem refId não ganha sufixo {#}", () => {
+    expect(htmlToMarkdown("<h1>Simples</h1>")).toBe("# Simples\n");
+  });
+
+  it("legenda preserva data-ref-id no roundtrip", () => {
+    const html = '<p data-caption="table" data-ref-id="ref-t1">medições</p>';
+    expect(htmlToMarkdown(html)).toContain('<p data-caption="table" data-ref-id="ref-t1">medições</p>');
+  });
+
+  it("faz roundtrip de equação inline", async () => {
+    const md = "a fórmula $E=mc^2$ muda tudo\n";
+    const html = await markdownToHtml(md);
+    expect(htmlToMarkdown(html)).toBe(md);
+  });
+
   it("degrada revisão: deleção vira strikethrough, comentário mantém texto", () => {
     const html =
       '<p><span data-comment-id="c1">comentado</span> <span data-deletion="">apagado</span></p>';
     const md = htmlToMarkdown(html);
     expect(md).toContain("comentado");
     expect(md).toContain("~~apagado~~");
+  });
+});
+
+describe("mathFromPandoc", () => {
+  it("converte spans math do pandoc (--mathjax) para data-math", () => {
+    const html = '<p>veja <span class="math inline">\\(E=mc^2\\)</span> aqui</p>';
+    const out = mathFromPandoc(html);
+    expect(out).toContain('data-math=""');
+    expect(out).toContain('data-latex="E=mc^2"');
+    expect(out).not.toContain("math inline");
+  });
+
+  it("math display vira nó inline (sem os \\[ \\])", () => {
+    const html = '<span class="math display">\\[\\sum_{i=1}^n i\\]</span>';
+    const out = mathFromPandoc(html);
+    expect(out).toContain("data-latex=");
+    expect(out).not.toContain("\\[");
+  });
+
+  it("não toca HTML sem math", () => {
+    const html = "<p>nada de especial</p>";
+    expect(mathFromPandoc(html)).toBe(html);
   });
 });
 

@@ -62,7 +62,7 @@ export function PrintPreview({ html, options, onClose }: PrintPreviewProps) {
 
   const fallback = () => {
     onClose();
-    printLegacy(html, options);
+    printLegacy(html, options).catch((e) => console.error("print legacy:", e));
   };
 
   return createPortal(

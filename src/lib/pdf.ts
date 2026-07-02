@@ -1,5 +1,6 @@
 import { advanceHeadingCounter, newHeadingCounters } from "../editor/HeadingNumbers";
 import { bakeCitationsInto } from "./citationStore";
+import { bakeCaptionsInto, type CaptionEntry } from "./captionNumbers";
 import { PAGE_SIZES } from "./pageGeometry";
 import { HeaderFooterSpec, PageFormat, PageMargins } from "./settings";
 
@@ -49,20 +50,36 @@ export interface PrintOptions {
  * - TOC placeholders (`nav[data-toc]`) become a real list of anchors; the page
  *   numbers are filled by CSS `target-counter` during pagination.
  * - Citations and the bibliography become formatted static text.
+ * - Math spans are rendered by KaTeX into static markup (async: KaTeX lives in
+ *   its own lazy chunk — the reason this whole function is async).
  */
-export function preparePrintHtml(html: string, opts: Pick<PrintOptions, "numberHeadings">): string {
+export async function preparePrintHtml(
+  html: string,
+  opts: Pick<PrintOptions, "numberHeadings">
+): Promise<string> {
   const needsWork =
     opts.numberHeadings ||
     html.includes("data-fn-ref") ||
     html.includes("data-page-break") ||
     html.includes("data-toc") ||
     html.includes("data-citation") ||
-    html.includes("data-bibliography");
+    html.includes("data-bibliography") ||
+    html.includes("data-math") ||
+    html.includes("data-caption") ||
+    html.includes("data-crossref");
   if (!needsWork) return html;
 
   const doc = new DOMParser().parseFromString(html, "text/html");
 
   bakeCitationsInto(doc);
+
+  // Math: bake KaTeX output as static markup. The editor renders math through
+  // a NodeView, which doesn't serialize — without this step printed math would
+  // be raw LaTeX source.
+  if (html.includes("data-math")) {
+    const { renderMathInto } = await import("./mathRender");
+    renderMathInto(doc);
+  }
 
   // Footnotes: bake numbers.
   const order = new Map<string, number>();
@@ -82,6 +99,17 @@ export function preparePrintHtml(html: string, opts: Pick<PrintOptions, "numberH
   // Page breaks: strip labels.
   doc.querySelectorAll("[data-page-break]").forEach((el) => el.replaceChildren());
 
+  // Captions: bake "Figura N — " labels (editor decorations don't serialize)
+  // and collect the entries for the figure/table lists below.
+  const captionEntries = bakeCaptionsInto(doc);
+
+  // Cross-reference targets: refId → anchor + resolved label. Captions here,
+  // headings during the walk below (their label needs the running counter).
+  const refMap = new Map<string, { id: string; label: string }>();
+  for (const c of captionEntries) {
+    if (c.refId) refMap.set(c.refId, { id: c.id, label: c.label });
+  }
+
   // Headings: collect entries, assign anchor ids, optionally bake numbers.
   // Must mirror the editor's decoration logic (same counter helper).
   const counters = newHeadingCounters();
@@ -93,6 +121,8 @@ export function preparePrintHtml(html: string, opts: Pick<PrintOptions, "numberH
     const label = advanceHeadingCounter(counters, level);
     const text = h.textContent ?? "";
     if (!h.id) h.id = `toc-h-${i}`;
+    const refId = h.getAttribute("data-ref-id");
+    if (refId) refMap.set(refId, { id: h.id, label: `Seção ${label}` });
     if (opts.numberHeadings) {
       // Marked span (not a bare text node) so reimport paths can strip the
       // baked number deterministically — see lib/bakedHeadingNumbers.ts.
@@ -104,25 +134,54 @@ export function preparePrintHtml(html: string, opts: Pick<PrintOptions, "numberH
     entries.push({ level, text: opts.numberHeadings ? `${label} ${text}` : text, id: h.id });
   });
 
+  // Cross-references become real anchors ("Figura 3" linking to the target);
+  // dangling ones print as "ref?" instead of vanishing silently.
+  doc.querySelectorAll("span[data-crossref]").forEach((el) => {
+    const t = refMap.get(el.getAttribute("data-crossref") ?? "");
+    if (t) {
+      const a = doc.createElement("a");
+      a.className = "crossref";
+      a.href = `#${t.id}`;
+      a.textContent = t.label;
+      el.replaceWith(a);
+    } else {
+      el.replaceWith(doc.createTextNode("ref?"));
+    }
+  });
+
   // TOC placeholders → anchor list (page number via ::after + target-counter).
+  // data-toc="" lists headings; data-toc="figures"/"tables" lists captions.
+  const appendTocEntry = (nav: Element, href: string, text: string, level: number) => {
+    const a = doc.createElement("a");
+    a.href = href;
+    a.className = `toc-entry lvl-${level}`;
+    const title = doc.createElement("span");
+    title.className = "toc-title";
+    title.textContent = text;
+    const dots = doc.createElement("span");
+    dots.className = "toc-dots";
+    a.append(title, dots);
+    nav.appendChild(a);
+  };
   doc.querySelectorAll("nav[data-toc]").forEach((nav) => {
+    const kind = nav.getAttribute("data-toc");
     nav.className = "toc";
     nav.replaceChildren();
     const header = doc.createElement("div");
     header.className = "toc-header";
-    header.textContent = "Sumário";
     nav.appendChild(header);
+    if (kind === "figures" || kind === "tables") {
+      header.textContent = kind === "figures" ? "Lista de Figuras" : "Lista de Tabelas";
+      const want: CaptionEntry["kind"] = kind === "figures" ? "figure" : "table";
+      for (const c of captionEntries) {
+        if (c.kind !== want) continue;
+        appendTocEntry(nav, `#${c.id}`, `${c.label} — ${c.text}`, 1);
+      }
+      return;
+    }
+    header.textContent = "Sumário";
     for (const e of entries) {
-      const a = doc.createElement("a");
-      a.href = `#${e.id}`;
-      a.className = `toc-entry lvl-${e.level}`;
-      const title = doc.createElement("span");
-      title.className = "toc-title";
-      title.textContent = e.text;
-      const dots = doc.createElement("span");
-      dots.className = "toc-dots";
-      a.append(title, dots);
-      nav.appendChild(a);
+      appendTocEntry(nav, `#${e.id}`, e.text, e.level);
     }
   });
 
@@ -194,15 +253,31 @@ function buildPrintCss(opts: PrintOptions): string {
     }
     ${firstPage}
 
+    /* Content typography MUST mirror the editor's .ProseMirror rules (App.css)
+       exactly, or the PDF paginates differently from the on-screen page
+       preview: line-height and inter-block spacing are what drive vertical
+       fill, so any drift here re-opens the gap between the editor's computed
+       page breaks and paged.js's. (16px == 12pt at 96dpi; kept in px to match
+       the editor verbatim.) */
     .print-content {
-      font-size: 12pt;
-      line-height: 1.5;
+      font-size: 16px;
+      line-height: 1.7;
       color: #000;
+      overflow-wrap: anywhere;
     }
-    .print-content img { max-width: 100%; }
+    .print-content > * + * { margin-top: 0.75em; }
+    .print-content h1 { font-size: 1.9em; line-height: 1.25; margin-top: 1.2em; }
+    .print-content h2 { font-size: 1.5em; margin-top: 1.1em; }
+    .print-content h3 { font-size: 1.2em; margin-top: 1em; }
+    .print-content ul, .print-content ol { padding-left: 1.4em; }
+    .print-content blockquote { border-left: 3px solid #999; margin-left: 0; padding-left: 1em; }
+    .print-content img { max-width: 100%; margin: 0.5em 0; }
     .print-content table { border-collapse: collapse; width: 100%; }
     .print-content th, .print-content td { border: 1px solid #999; padding: 4px 8px; }
     .print-content [data-page-break] { break-after: page; border: none; height: 0; margin: 0; }
+    .print-content p[data-caption] { font-size: 0.9em; text-align: center; margin: 0.4em 0 1.4em; break-before: avoid; }
+    .print-content [data-baked-caption-num] { font-weight: 600; }
+    .print-content a.crossref { color: #000; text-decoration: none; }
     .print-content .page-break-label { display: none; }
     .print-content .footnote-ref { font-weight: 600; }
     .print-content .footnotes {
@@ -301,7 +376,7 @@ async function doRenderPaged(
   wipePagedOutput(container);
 
   const template = document.createElement("template");
-  template.innerHTML = `<div class="print-content">${preparePrintHtml(contentHtml, opts)}</div>`;
+  template.innerHTML = `<div class="print-content">${await preparePrintHtml(contentHtml, opts)}</div>`;
 
   const cssUrl = URL.createObjectURL(
     new Blob([buildPrintCss(opts)], { type: "text/css" })
@@ -336,12 +411,13 @@ async function doRenderPaged(
  * Old print path: dump the content into a hidden print root and let the
  * browser paginate. No page numbers or headers, but it always works.
  */
-export function printLegacy(contentHtml: string, opts: PrintOptions): void {
+export async function printLegacy(contentHtml: string, opts: PrintOptions): Promise<void> {
+  const prepared = await preparePrintHtml(contentHtml, opts);
   document.getElementById("print-root")?.remove();
 
   const root = document.createElement("div");
   root.id = "print-root";
-  root.innerHTML = `<div class="print-content">${preparePrintHtml(contentHtml, opts)}</div>`;
+  root.innerHTML = `<div class="print-content">${prepared}</div>`;
 
   // margin:0 leaves no room for the browser's own header/footer (date, title,
   // page number, URL); the visual margins live in .print-content padding.
@@ -359,5 +435,8 @@ export function printLegacy(contentHtml: string, opts: PrintOptions): void {
   window.addEventListener("afterprint", cleanup);
   setTimeout(cleanup, 60000);
 
+  // Webfonts (KaTeX's, custom fonts) may still be loading; printing before
+  // they land would rasterize fallback glyphs into the PDF.
+  await document.fonts.ready;
   window.print();
 }

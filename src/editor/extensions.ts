@@ -15,7 +15,10 @@ import TaskItem from "@tiptap/extension-task-item";
 import Subscript from "@tiptap/extension-subscript";
 import Superscript from "@tiptap/extension-superscript";
 import { FootnoteRef, Footnote, Footnotes } from "./Footnotes";
+import { MathInline } from "./Math";
 import { HeadingNumbers } from "./HeadingNumbers";
+import { Caption } from "./Caption";
+import { CrossRef, CrossRefTargets } from "./CrossRef";
 import { DocLayoutExtension } from "./DocLayout";
 import { TableOfContents } from "./TableOfContents";
 import { Citation, CitationSuggestion } from "./Citation";
@@ -25,6 +28,7 @@ import { SlashCommand } from "./slash/SlashCommand";
 import { loadSettings } from "../lib/settings";
 import { SearchExtension } from "./search/SearchExtension";
 import { PageBreak } from "./PageBreak";
+import { PageBreaks } from "./PageBreaks";
 import { FontSize } from "./FontSize";
 import { LetterSpacing } from "./LetterSpacing";
 import { LineHeight } from "./LineHeight";
@@ -63,7 +67,11 @@ export function buildExtensions() {
     FootnoteRef,
     Footnote,
     Footnotes,
+    MathInline,
     HeadingNumbers,
+    Caption,
+    CrossRef,
+    CrossRefTargets,
     TableOfContents,
     Citation,
     CitationSuggestion,
@@ -76,6 +84,7 @@ export function buildExtensions() {
       getAuthor: () => loadSettings().authorName || "Autor",
     }),
     PageBreak,
+    PageBreaks,
     SlashCommand,
     SearchExtension,
     DocLayoutExtension,

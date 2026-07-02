@@ -48,10 +48,36 @@ function pandocToCitationSpan(inner: string): string {
   return `<span ${attrs.join(" ")}></span>`;
 }
 
+/** Minimal HTML escaping for attribute values and text content. */
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
 marked.setOptions({ gfm: true, breaks: false });
 marked.use(markedFootnote());
 marked.use({
   extensions: [
+    {
+      // Pandoc tex_math_dollars: $latex$ becomes an inline equation. Currency
+      // guard: the opening $ can't be followed by whitespace, the closing $
+      // can't be preceded by whitespace nor followed by a digit, and the
+      // content must have something beyond digits/punctuation — so
+      // "custa $50 e $60" stays plain text.
+      name: "inlineMath",
+      level: "inline",
+      start(src: string) {
+        return src.indexOf("$");
+      },
+      tokenizer(src: string) {
+        const m = /^\$(?=[^$\n]*[^\d\s.,$])([^\s$](?:[^$\n]*[^\s$])?)\$(?!\d)/.exec(src);
+        if (!m) return undefined;
+        return { type: "inlineMath", raw: m[0], text: m[1] };
+      },
+      renderer(token) {
+        const latex = (token as unknown as { text: string }).text;
+        return `<span data-math="" data-latex="${escapeHtml(latex)}">${escapeHtml(latex)}</span>`;
+      },
+    },
     {
       name: "pandocCitation",
       level: "inline",
@@ -71,6 +97,45 @@ marked.use({
   ],
 });
 
+// Pandoc header-attribute syntax ("## Título {#ref-abc}") carries the
+// cross-reference id of a heading through Markdown; written by the
+// headingWithRefId turndown rule below.
+marked.use({
+  renderer: {
+    heading({ tokens, depth, text }) {
+      const m = /\s*\{#([\w-]+)\}\s*$/.exec(text);
+      let inner = this.parser.parseInline(tokens);
+      if (!m) return `<h${depth}>${inner}</h${depth}>\n`;
+      inner = inner.replace(/\s*\{#[\w-]+\}\s*$/, "");
+      return `<h${depth} data-ref-id="${m[1]}">${inner}</h${depth}>\n`;
+    },
+  },
+});
+
+// Raw OOXML markers from docxFields.bakeNativeFieldsForDocx -> pandoc
+// `<xml>`{=openxml} raw_attribute syntax. Inline runs only (never a full
+// <w:p>: pandoc wraps raw blocks in their own paragraph, so a raw block
+// that is itself a <w:p> produces invalid nested paragraphs). Requires the
+// caller to export via pandoc's markdown reader with +raw_attribute, or
+// this syntax round-trips back out as literal text.
+function ooxmlRawReplacement(el: HTMLElement): string {
+  const xml = el.getAttribute("data-ooxml") ?? "";
+  if (!xml) return "";
+  // Cached field text (heading/caption labels) can contain backticks; fence
+  // with one more backtick than the longest run inside, same rule Markdown
+  // code spans use, so the raw block never terminates early.
+  const longestRun = Math.max(0, ...(xml.match(/`+/g) ?? []).map((r) => r.length));
+  const fence = "`".repeat(longestRun + 1);
+  // Trailing literal text (docxFields' " — " caption separator) rides along
+  // in the SAME replacement string rather than a sibling text node: turndown
+  // drops the leading whitespace of any text node that immediately follows a
+  // blank-replaced inline element (pre-existing behavior — affects the plain
+  // data-crossref passthrough too), so a separate " — " node would lose its
+  // space here.
+  const suffix = el.getAttribute("data-suffix") ?? "";
+  return `${fence}${xml}${fence}{=openxml}${suffix}`;
+}
+
 const turndown = new TurndownService({
   headingStyle: "atx",
   codeBlockStyle: "fenced",
@@ -86,7 +151,17 @@ const turndown = new TurndownService({
       return `[^${fnLabel(el.getAttribute("data-fn-ref")!)}]`;
     }
     if (el.nodeName === "NAV" && el.hasAttribute?.("data-toc")) {
-      return '\n\n<nav data-toc=""></nav>\n\n';
+      // The attribute value distinguishes Sumário / Lista de Figuras / Tabelas.
+      return `\n\n<nav data-toc="${el.getAttribute("data-toc") ?? ""}"></nav>\n\n`;
+    }
+    if (el.nodeName === "P" && el.hasAttribute?.("data-caption")) {
+      return `\n\n${captionOpenTag(el)}</p>\n\n`;
+    }
+    if (el.nodeName === "SPAN" && el.hasAttribute?.("data-crossref")) {
+      return `<span data-crossref="${el.getAttribute("data-crossref")}"></span>`;
+    }
+    if (el.nodeName === "SPAN" && el.hasAttribute?.("data-ooxml")) {
+      return ooxmlRawReplacement(el);
     }
     if (el.nodeName === "DIV" && el.hasAttribute?.("data-bibliography")) {
       return '\n\n<div data-bibliography=""></div>\n\n';
@@ -101,6 +176,68 @@ turndown.use(gfm);
 // Subscript/superscript have no Markdown syntax; keep the raw HTML tags so the
 // round-trip survives (pandoc also reads <sub>/<sup> into DOCX/ODT natively).
 turndown.keep(["sub", "sup"]);
+
+/** Opening tag for a caption block, preserving kind and cross-ref id. */
+function captionOpenTag(el: HTMLElement): string {
+  const kind = el.getAttribute("data-caption") === "table" ? "table" : "figure";
+  const refId = el.getAttribute("data-ref-id");
+  return `<p data-caption="${kind}"${refId ? ` data-ref-id="${refId}"` : ""}>`;
+}
+
+// Captions have no Markdown form — keep them as raw HTML blocks (marked hands
+// block-level raw HTML back untouched, so the round-trip is lossless).
+turndown.addRule("captionBlock", {
+  filter: (node) => node.nodeName === "P" && node.hasAttribute("data-caption"),
+  replacement: (_content, node) => {
+    const el = node as HTMLElement;
+    return `\n\n${captionOpenTag(el)}${el.innerHTML}</p>\n\n`;
+  },
+});
+
+// Cross-references are empty inline spans; non-empty ones (never produced by
+// the editor, but harmless) go through this rule, empty ones through the
+// blankReplacement hook above.
+turndown.addRule("crossrefSpan", {
+  filter: (node) => node.nodeName === "SPAN" && node.hasAttribute("data-crossref"),
+  replacement: (_content, node) =>
+    `<span data-crossref="${(node as HTMLElement).getAttribute("data-crossref")}"></span>`,
+});
+
+// Headings that are cross-reference targets carry their id in pandoc's header
+// attribute syntax ("## Título {#ref-abc}"), read back by the heading
+// renderer below. Headings without a refId stay plain.
+turndown.addRule("headingWithRefId", {
+  filter: ["h1", "h2", "h3", "h4", "h5", "h6"],
+  replacement: (content, node) => {
+    const el = node as HTMLElement;
+    const level = Number(el.nodeName[1]);
+    const refId = el.getAttribute("data-ref-id");
+    const suffix = refId ? ` {#${refId}}` : "";
+    return `\n\n${"#".repeat(level)} ${content}${suffix}\n\n`;
+  },
+});
+
+// Inline equations -> pandoc $latex$ syntax (round-trips through marked's
+// inlineMath extension above; pandoc's markdown reader also parses it, which
+// is how DOCX export gets native Word equations).
+turndown.addRule("mathInline", {
+  filter: (node) => node.nodeName === "SPAN" && node.hasAttribute("data-math"),
+  replacement: (_content, node) => {
+    const el = node as HTMLElement;
+    const latex = (el.getAttribute("data-latex") ?? el.textContent ?? "").trim();
+    return latex ? `$${latex}$` : "";
+  },
+});
+
+// Raw OOXML markers from docxFields.bakeNativeFieldsForDocx — inline runs
+// (never a full <w:p>: pandoc wraps raw blocks in their own paragraph, so a
+// raw block that is itself a <w:p> produces invalid nested paragraphs).
+// Requires the caller to export via pandoc's markdown reader with
+// +raw_attribute, or this syntax round-trips back out as literal text.
+turndown.addRule("ooxmlRaw", {
+  filter: (node) => node.nodeName === "SPAN" && node.hasAttribute("data-ooxml"),
+  replacement: (_content, node) => ooxmlRawReplacement(node as HTMLElement),
+});
 
 // Review data has no Markdown form — degrade gracefully: comments and pending
 // insertions keep their text, pending deletions become GFM strikethrough.
@@ -138,6 +275,34 @@ turndown.addRule("footnotesSection", {
     return defs.length ? "\n\n" + defs.join("\n") + "\n" : "";
   },
 });
+
+/**
+ * Convert pandoc's math spans (`<span class="math inline">\(E=mc^2\)</span>`,
+ * emitted with --mathjax so the TeX source survives) into this app's
+ * `span[data-math]` form. Display math (`\[...\]`) becomes inline — the
+ * editor's math node is inline-only.
+ */
+export function mathFromPandoc(html: string): string {
+  if (!html.includes('class="math')) return html;
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  doc.querySelectorAll("span.math").forEach((el) => {
+    const latex = (el.textContent ?? "")
+      .trim()
+      .replace(/^\\[([]/, "")
+      .replace(/\\[)\]]$/, "")
+      .trim();
+    if (!latex) {
+      el.remove();
+      return;
+    }
+    const span = doc.createElement("span");
+    span.setAttribute("data-math", "");
+    span.setAttribute("data-latex", latex);
+    span.textContent = latex;
+    el.replaceWith(span);
+  });
+  return doc.body.innerHTML;
+}
 
 /** Drop the "↩" backlinks pandoc / marked-footnote add inside note bodies. */
 export function stripFootnoteBackrefs(html: string): string {

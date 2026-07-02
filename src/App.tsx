@@ -16,7 +16,7 @@ import { SettingsModal } from "./SettingsModal";
 import { VersionHistory } from "./VersionHistory";
 import { PrintPreview } from "./PrintPreview";
 import { DocTemplate, applyTemplateContent } from "./lib/templates";
-import { EMPTY_DOC } from "./lib/tabs";
+import { EMPTY_DOC, tabTitle } from "./lib/tabs";
 import { useDocumentTabs } from "./hooks/useDocumentTabs";
 import { useAutosave } from "./hooks/useAutosave";
 import { useFileOperations } from "./hooks/useFileOperations";
@@ -29,6 +29,7 @@ import { useSettings } from "./state/SettingsContext";
 import { EditorProvider } from "./state/EditorContext";
 import { PAGE_SIZES } from "./lib/pageGeometry";
 import { effectiveLayoutFor, patchDocLayout, type DocLayout } from "./editor/DocLayout";
+import { recomputePageChrome } from "./editor/PageBreaks";
 import "./App.css";
 
 function App() {
@@ -138,6 +139,17 @@ function App() {
     dom.setAttribute("lang", settings.docLang || "pt-BR");
   }, [editor, settings.spellcheck, settings.docLang]);
 
+  // Expose the document title on the editor DOM so the PageBreaks plugin can
+  // resolve {title} in the per-page header/footer chrome (the plugin has the
+  // doc but not the tab name; this is the same channel spellcheck/lang use).
+  useEffect(() => {
+    if (!editor) return;
+    (editor.view.dom as HTMLElement).dataset.docTitle = activeTab ? tabTitle(activeTab) : "";
+    // A dataset change isn't a transaction, so nudge the plugin to redraw the
+    // header/footer (otherwise {title} would stay stale until the next edit).
+    recomputePageChrome(editor);
+  }, [editor, activeTab]);
+
   // Heading numbering lives in plugin state; keep it in sync with the doc's layout.
   useEffect(() => {
     editor?.commands.setHeadingNumbers(docLayout.numberHeadings);
@@ -243,11 +255,16 @@ function App() {
   });
 
   const pageStyle = useMemo(() => {
-    const style: Record<string, string> = {
-      padding: `${pageMargins.top}px ${pageMargins.right}px ${pageMargins.bottom}px ${pageMargins.left}px`,
-    };
+    const style: Record<string, string> = {};
     if (pageFormat !== "classic") {
       style.width = dims.widthCss;
+      // Paginated mode: the vertical margins are provided by the PageBreaks
+      // chrome decorations (leading/trailing white bands that also hold the
+      // header/footer), so `.page` only pads horizontally here — otherwise
+      // page 1 would get a doubled top margin.
+      style.padding = `0 ${pageMargins.right}px 0 ${pageMargins.left}px`;
+    } else {
+      style.padding = `${pageMargins.top}px ${pageMargins.right}px ${pageMargins.bottom}px ${pageMargins.left}px`;
     }
     return style;
   }, [pageFormat, dims, pageMargins]);

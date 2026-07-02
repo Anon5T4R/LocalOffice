@@ -29,10 +29,21 @@ pub(crate) async fn import_via_pandoc(
     from: String,
 ) -> Result<String, String> {
     // --track-changes=all keeps Word comments and tracked changes as spans
-    // (the JS side maps them to review marks).
+    // (the JS side maps them to review marks). --mathjax makes equations come
+    // out as \(...\) with the TeX source intact (the default renders them to
+    // lossy Unicode); the JS side maps those spans to math nodes.
     run_pandoc(
         &app,
-        &[path.as_str(), "-f", from.as_str(), "-t", "html", "--wrap=none", "--track-changes=all"],
+        &[
+            path.as_str(),
+            "-f",
+            from.as_str(),
+            "-t",
+            "html",
+            "--wrap=none",
+            "--track-changes=all",
+            "--mathjax",
+        ],
         "import",
     )
     .await
@@ -67,9 +78,15 @@ pub(crate) async fn export_via_pandoc(
         .map_err(|e| format!("falha ao gravar temp: {}", e))?;
     let tmp_str = tmp.to_string_lossy().to_string();
 
+    // +raw_attribute lets markdown carry inline `<xml>`{=openxml} spans that
+    // pandoc's docx writer passes through byte-for-byte (docxFields.ts uses
+    // this for native SEQ/REF fields). No effect on documents that don't use
+    // the syntax, so always-on for the markdown reader is safe.
+    let from_arg = if from == "markdown" { "markdown+raw_attribute" } else { from.as_str() };
+
     let result = run_pandoc(
         &app,
-        &[tmp_str.as_str(), "-f", from.as_str(), "-t", to.as_str(), "-o", path.as_str()],
+        &[tmp_str.as_str(), "-f", from_arg, "-t", to.as_str(), "-o", path.as_str()],
         "export",
     )
     .await;

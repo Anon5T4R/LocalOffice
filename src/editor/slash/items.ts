@@ -129,6 +129,15 @@ const ITEMS: SlashItem[] = [
     },
   },
   {
+    title: "Equação",
+    subtitle: 'Fórmula LaTeX (ou digite "$x$")',
+    icon: "√x",
+    keywords: "equacao formula matematica math latex katex",
+    command: ({ editor, range }) => {
+      editor.chain().focus().deleteRange(range).insertMath().run();
+    },
+  },
+  {
     title: "Nota de rodapé",
     subtitle: "Referência + nota no fim",
     icon: "⁺",
@@ -138,12 +147,39 @@ const ITEMS: SlashItem[] = [
     },
   },
   {
+    title: "Legenda",
+    subtitle: "Legenda numerada de figura/tabela",
+    icon: "🏷",
+    keywords: "legenda caption figura tabela numeracao",
+    command: ({ editor, range }) => {
+      editor.chain().focus().deleteRange(range).insertCaption().run();
+    },
+  },
+  {
     title: "Sumário",
     subtitle: "Índice dos títulos (com páginas no PDF)",
     icon: "☰",
     keywords: "sumario indice toc table of contents titulos",
     command: ({ editor, range }) => {
       editor.chain().focus().deleteRange(range).insertTableOfContents().run();
+    },
+  },
+  {
+    title: "Lista de figuras",
+    subtitle: "Índice das legendas de figura",
+    icon: "🖼",
+    keywords: "lista figuras ilustracoes indice",
+    command: ({ editor, range }) => {
+      editor.chain().focus().deleteRange(range).insertTableOfContents("figures").run();
+    },
+  },
+  {
+    title: "Lista de tabelas",
+    subtitle: "Índice das legendas de tabela",
+    icon: "▦",
+    keywords: "lista tabelas indice",
+    command: ({ editor, range }) => {
+      editor.chain().focus().deleteRange(range).insertTableOfContents("tables").run();
     },
   },
   {
