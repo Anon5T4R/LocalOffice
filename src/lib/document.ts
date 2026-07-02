@@ -2,9 +2,10 @@ import { invoke } from "@tauri-apps/api/core";
 import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { markdownToHtml, htmlToMarkdown, stripFootnoteBackrefs } from "./markdown";
 import { bakeCitationsHtml } from "./citationStore";
-import { bakeHeadingNumbers, stripBakedHeadingNumbers } from "./bakedHeadingNumbers";
+import { bakeHeadingNumbers, detectManualNumberingSequence, stripBakedHeadingNumbers } from "./bakedHeadingNumbers";
 import { bakeReviewForDocx, reviewFromPandoc } from "./reviewExport";
 import { loadSettings } from "./settings";
+import { settingsLayout, type DocLayout } from "../editor/DocLayout";
 
 /** Whether the editor HTML carries footnotes (drives the DOCX/ODT export path). */
 function hasFootnotes(html: string): boolean {
@@ -22,6 +23,9 @@ export interface DocFile {
   path: string;
   html: string;
   format: DocFormat;
+  /** Layout embedded in the file (see extractLayout below), or null if the
+   *  document never had one of its own — the editor falls back to Settings. */
+  layout: DocLayout | null;
 }
 
 function formatFromPath(path: string): DocFormat {
@@ -38,29 +42,92 @@ export function baseName(path: string): string {
   return path.split(/[\\/]/).pop() ?? path;
 }
 
+// Per-document layout (see editor/DocLayout.ts) travels with .md/.html files
+// as a leading HTML comment — invisible to any other reader/renderer of the
+// file, and trivial to strip back out. Pandoc formats (docx/odt/rtf) don't
+// round-trip it: pandoc's HTML reader/writer drops arbitrary comments and
+// data-* metadata, so those seed from Settings on every open, same as before
+// this feature existed.
+const LAYOUT_MARKER_RE = /^<!--localoffice:layout (.*?)-->\n?/;
+
+function extractLayout(raw: string): { raw: string; layout: DocLayout | null } {
+  const m = raw.match(LAYOUT_MARKER_RE);
+  if (!m) return { raw, layout: null };
+  try {
+    return { raw: raw.slice(m[0].length), layout: JSON.parse(m[1]) as DocLayout };
+  } catch {
+    return { raw, layout: null }; // malformed marker — treat as ordinary content, don't lose it
+  }
+}
+
+function embedLayout(raw: string, layout: DocLayout | null): string {
+  return layout ? `<!--localoffice:layout ${JSON.stringify(layout)}-->\n${raw}` : raw;
+}
+
+/**
+ * Marked heading-number spans are always stripped silently — deterministic,
+ * never real content. A plain-text prefix sequence that exactly matches what
+ * the automatic counter would generate is ambiguous, though: it's either a
+ * number this app baked and lost the marker for (DOCX/ODT round-trip drops
+ * the span), or a document someone numbered by hand in the same convention
+ * (common with ABNT's "1 Introdução" style) — silently deleting somebody
+ * else's typed numbers is not a safe default, so this asks first.
+ */
+function resolveHeadingNumbers(
+  html: string,
+  stripUnmarked: boolean,
+  layout: DocLayout | null
+): { html: string; layout: DocLayout | null } {
+  if (stripUnmarked && detectManualNumberingSequence(html)) {
+    const convert = window.confirm(
+      "Este documento tem títulos numerados manualmente, no mesmo padrão da numeração automática.\n" +
+        "Converter para numeração automática? (remove os números digitados — o editor passa a gerá-los)"
+    );
+    if (convert) return { html: stripBakedHeadingNumbers(html, true), layout };
+    // Keep the typed numbers as real content: turn automatic numbering off
+    // for THIS document only — the app-wide setting is untouched, so other
+    // documents keep numbering as before.
+    return {
+      html: stripBakedHeadingNumbers(html, false),
+      layout: { ...(layout ?? settingsLayout(loadSettings())), numberHeadings: false },
+    };
+  }
+  return { html: stripBakedHeadingNumbers(html, stripUnmarked), layout };
+}
+
 /** Load a file's contents into editor HTML. */
-async function readToHtml(path: string, format: DocFormat): Promise<string> {
+async function readToHtml(path: string, format: DocFormat): Promise<{ html: string; layout: DocLayout | null }> {
+  if (PANDOC_FORMATS.has(format)) {
+    const html = await invoke<string>("import_via_pandoc", { path, from: format });
+    // No embedded layout for pandoc formats — fall back to Settings, same as
+    // the numberHeadings-driven strip did before layout became per-document.
+    const stripUnmarked = loadSettings().numberHeadings === true;
+    return resolveHeadingNumbers(reviewFromPandoc(stripFootnoteBackrefs(html)), stripUnmarked, null);
+  }
+  const rawFile = await invoke<string>("read_text_file", { path });
+  const { raw, layout } = extractLayout(rawFile);
+  const html = format === "markdown" ? await markdownToHtml(raw) : raw;
   // Heading numbers baked into the file by an export must come back out, or
   // the editor's decorations double them. Unmarked text prefixes (DOCX loses
   // the marker span) are only stripped while automatic numbering is on — with
   // it off there is nothing to double, so the text is left alone.
-  const stripUnmarked = loadSettings().numberHeadings === true;
-  if (PANDOC_FORMATS.has(format)) {
-    const html = await invoke<string>("import_via_pandoc", { path, from: format });
-    return stripBakedHeadingNumbers(reviewFromPandoc(stripFootnoteBackrefs(html)), stripUnmarked);
-  }
-  const raw = await invoke<string>("read_text_file", { path });
-  const html = format === "markdown" ? await markdownToHtml(raw) : raw;
-  return stripBakedHeadingNumbers(html, stripUnmarked);
+  const stripUnmarked = layout ? layout.numberHeadings : loadSettings().numberHeadings === true;
+  return resolveHeadingNumbers(html, stripUnmarked, layout);
 }
 
 /** Write editor HTML to disk in the given format. */
-export async function saveDocumentTo(path: string, html: string, format: DocFormat): Promise<void> {
+export async function saveDocumentTo(
+  path: string,
+  html: string,
+  format: DocFormat,
+  layout: DocLayout | null
+): Promise<void> {
+  const numberHeadings = layout ? layout.numberHeadings : loadSettings().numberHeadings === true;
   // Automatic heading numbers are editor decorations and don't serialize —
   // bake them in (marked, so reopening strips them) or a Word/browser reader
   // sees unnumbered headings. Markdown stays clean: it's source form, and the
   // editor regenerates the numbers from it.
-  if (format !== "markdown" && loadSettings().numberHeadings === true) {
+  if (format !== "markdown" && numberHeadings) {
     html = bakeHeadingNumbers(html);
   }
   if (PANDOC_FORMATS.has(format)) {
@@ -79,15 +146,15 @@ export async function saveDocumentTo(path: string, html: string, format: DocForm
     return;
   }
   // .md keeps pandoc [@key] syntax; .html keeps the data attributes (both round-trip).
-  const contents = format === "markdown" ? htmlToMarkdown(html) : html;
+  const contents = embedLayout(format === "markdown" ? htmlToMarkdown(html) : html, layout);
   await invoke("write_text_file", { path, contents });
 }
 
 /** Load a document from a known path (used by the recents menu). */
 export async function openDocumentPath(path: string): Promise<DocFile> {
   const format = formatFromPath(path);
-  const html = await readToHtml(path, format);
-  return { path, html, format };
+  const { html, layout } = await readToHtml(path, format);
+  return { path, html, format, layout };
 }
 
 /** Show a native open dialog and load the chosen file. Returns null if cancelled. */
@@ -104,12 +171,16 @@ export async function openDocument(): Promise<DocFile | null> {
   });
   if (!selected || Array.isArray(selected)) return null;
   const format = formatFromPath(selected);
-  const html = await readToHtml(selected, format);
-  return { path: selected, html, format };
+  const { html, layout } = await readToHtml(selected, format);
+  return { path: selected, html, format, layout };
 }
 
 /** Show a native save dialog and write there. Returns the new DocFile, or null if cancelled. */
-export async function saveDocumentAs(html: string, suggestedName = "sem-titulo.md"): Promise<DocFile | null> {
+export async function saveDocumentAs(
+  html: string,
+  layout: DocLayout | null,
+  suggestedName = "sem-titulo.md"
+): Promise<DocFile | null> {
   const path = await saveDialog({
     defaultPath: suggestedName,
     filters: [
@@ -123,6 +194,6 @@ export async function saveDocumentAs(html: string, suggestedName = "sem-titulo.m
   });
   if (!path) return null;
   const format = formatFromPath(path);
-  await saveDocumentTo(path, html, format);
-  return { path, html, format };
+  await saveDocumentTo(path, html, format, layout);
+  return { path, html, format, layout };
 }

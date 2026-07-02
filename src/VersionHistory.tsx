@@ -37,7 +37,7 @@ export function VersionHistory({ tab, onClose, onSaveVersion, onRestoreVersion }
   }, [load]);
 
   const handleSave = useCallback(async () => {
-    if (!newName.trim()) return;
+    if (!newName.trim() || saving) return;
     setSaving(true);
     try {
       await onSaveVersion(newName.trim());

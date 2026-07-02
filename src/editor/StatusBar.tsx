@@ -1,16 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { useEditorState } from "@tiptap/react";
-import { SaveStatus } from "../lib/tabs";
+import { estimatePages } from "../lib/pageGeometry";
+import { getTabSaveStatus, subscribeTabSaveStatus } from "../lib/saveStatusStore";
+import { effectiveLayout } from "./DocLayout";
 import { useSettings } from "../state/SettingsContext";
 import { useEditorInstance } from "../state/EditorContext";
-
-const FULL_PAGE_PX: Record<string, number> = {
-  classic: 980,
-  a4: 1123,
-  a5: 794,
-  letter: 1056,
-  a3: 1587,
-};
 
 const WORDS_PER_MINUTE = 200;
 
@@ -21,14 +15,16 @@ function countWords(text: string): number {
 
 interface StatusBarProps {
   onZoomChange: (z: number) => void;
-  /** Autosave/save pipeline state; errors stay visible until a save succeeds. */
-  saveStatus?: SaveStatus;
+  activeTabId: string;
 }
 
-export function StatusBar({ onZoomChange, saveStatus }: StatusBarProps) {
+export function StatusBar({ onZoomChange, activeTabId }: StatusBarProps) {
   const editor = useEditorInstance();
   const { settings } = useSettings();
-  const pageFormat = settings.pageFormat || "classic";
+  // Subscribed directly (instead of a prop threaded through App) so a save
+  // transition only re-renders StatusBar, not the whole app tree.
+  const saveStatus = useSyncExternalStore(subscribeTabSaveStatus, () => getTabSaveStatus(activeTabId));
+  const { pageFormat, pageMargins: margins } = effectiveLayout(editor.state.doc, settings);
   const zoom = settings.zoom || 100;
   const wordGoal = settings.wordGoal || 0;
   const { words, chars, charsNoSpaces, paragraphs, breaks, selWords, selChars } = useEditorState({
@@ -56,17 +52,20 @@ export function StatusBar({ onZoomChange, saveStatus }: StatusBarProps) {
   });
 
   const [heightPages, setHeightPages] = useState(1);
-  const margins = settings.pageMargins || { top: 56, bottom: 56, left: 72, right: 72 };
-  const printablePx = (FULL_PAGE_PX[pageFormat] || 980) - margins.top - margins.bottom;
+  const zoomFactor = (settings.zoom || 100) / 100;
 
   useEffect(() => {
     const el = editor.view.dom as HTMLElement;
-    const measure = () => setHeightPages(Math.max(1, Math.ceil(el.scrollHeight / printablePx)));
+    // el.scrollHeight is measured inside the ancestor that carries the CSS
+    // `zoom` (App.tsx's .pages-container) and scales with it in this
+    // WebView — estimatePages compensates so the count doesn't change
+    // just because the user zoomed in or out.
+    const measure = () => setHeightPages(estimatePages(el.scrollHeight, pageFormat, margins, zoomFactor));
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [editor, printablePx]);
+  }, [editor, pageFormat, margins, zoomFactor]);
 
   const pages = Math.max(heightPages, breaks + 1);
   const readMin = Math.max(1, Math.round(words / WORDS_PER_MINUTE));
@@ -84,12 +83,17 @@ export function StatusBar({ onZoomChange, saveStatus }: StatusBarProps) {
         </span>
       )}
       <span title="Tempo de leitura estimado (~200 palavras/min)">{readMin} min de leitura</span>
-      {saveStatus?.kind === "error" && (
+      {saveStatus.kind === "error" && (
         <span className="status-save-error" title={saveStatus.message}>
           ⚠ Falha ao salvar automaticamente — Ctrl+S para tentar de novo
         </span>
       )}
-      {saveStatus?.kind === "saving" && <span className="status-saving">Salvando…</span>}
+      {saveStatus.kind === "saving" && <span className="status-saving">Salvando…</span>}
+      {saveStatus.kind === "saved" && (
+        <span className="status-saved" title="Última gravação em disco bem-sucedida">
+          Salvo às {new Date(saveStatus.at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+        </span>
+      )}
       {wordGoal ? (
         <span
           className={"status-goal" + (words >= wordGoal ? " is-done" : "")}

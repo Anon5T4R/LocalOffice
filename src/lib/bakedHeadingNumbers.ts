@@ -46,6 +46,32 @@ function stripPrefixText(h: Element): void {
   if (node) node.textContent = (node.textContent ?? "").replace(PREFIX_RE, "");
 }
 
+/** Every content heading carries a plain-text prefix exactly matching what
+ *  the automatic counter would generate — the same sequence a real bake
+ *  would have produced, so it's a strong signal the numbers came from this
+ *  app (or a document numbered by hand in the exact same convention). */
+function matchesAutoSequence(headings: Element[]): boolean {
+  const counters = newHeadingCounters();
+  return (
+    headings.length > 0 &&
+    headings.every((h) => {
+      const m = PREFIX_RE.exec(h.textContent ?? "");
+      return !!m && m[1] === advanceHeadingCounter(counters, Number(h.tagName[1]));
+    })
+  );
+}
+
+/**
+ * Detect the same sequence `stripBakedHeadingNumbers`'s heuristic would
+ * strip, without mutating anything — lets a caller ask the user for
+ * confirmation before content is silently rewritten (see lib/document.ts).
+ */
+export function detectManualNumberingSequence(html: string): boolean {
+  if (!/<h[1-6]/i.test(html)) return false;
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  return matchesAutoSequence(contentHeadings(doc));
+}
+
 /**
  * Remove baked heading numbers from incoming HTML.
  *
@@ -60,6 +86,10 @@ function stripPrefixText(h: Element): void {
  */
 export function stripBakedHeadingNumbers(html: string, stripUnmarked = false): string {
   if (!/<h[1-6]/i.test(html)) return html;
+  // Nothing to strip and automatic numbering is off (so nothing would
+  // double either): skip the DOM parse entirely. This is the common case on
+  // every file open when numberHeadings is off.
+  if (!stripUnmarked && !html.includes("data-baked-heading-num") && !html.includes("heading-num")) return html;
   const doc = new DOMParser().parseFromString(html, "text/html");
 
   doc
@@ -68,14 +98,7 @@ export function stripBakedHeadingNumbers(html: string, stripUnmarked = false): s
 
   if (stripUnmarked) {
     const headings = contentHeadings(doc);
-    const counters = newHeadingCounters();
-    const wholeSequenceBaked =
-      headings.length > 0 &&
-      headings.every((h) => {
-        const m = PREFIX_RE.exec(h.textContent ?? "");
-        return !!m && m[1] === advanceHeadingCounter(counters, Number(h.tagName[1]));
-      });
-    if (wholeSequenceBaked) headings.forEach(stripPrefixText);
+    if (matchesAutoSequence(headings)) headings.forEach(stripPrefixText);
   }
 
   return doc.body.innerHTML;

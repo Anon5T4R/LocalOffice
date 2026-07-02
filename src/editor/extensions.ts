@@ -16,6 +16,7 @@ import Subscript from "@tiptap/extension-subscript";
 import Superscript from "@tiptap/extension-superscript";
 import { FootnoteRef, Footnote, Footnotes } from "./Footnotes";
 import { HeadingNumbers } from "./HeadingNumbers";
+import { DocLayoutExtension } from "./DocLayout";
 import { TableOfContents } from "./TableOfContents";
 import { Citation, CitationSuggestion } from "./Citation";
 import { Bibliography } from "./Bibliography";
@@ -34,6 +35,9 @@ export function buildExtensions() {
     // StarterKit (v3) already bundles Underline and Link.
     StarterKit.configure({
       link: { openOnClick: false, autolink: true },
+      // Default depth (100) loses history after a burst of edits; raise it
+      // so Ctrl+Z reaches meaningfully further back in a writing session.
+      undoRedo: { depth: 500 },
     }),
     Placeholder.configure({
       placeholder: 'Digite "/" para comandos, ou comece a escrever…',
@@ -74,5 +78,6 @@ export function buildExtensions() {
     PageBreak,
     SlashCommand,
     SearchExtension,
+    DocLayoutExtension,
   ];
 }

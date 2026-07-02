@@ -24,16 +24,26 @@ export function PrintPreview({ html, options, onClose }: PrintPreviewProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [state, setState] = useState<PreviewState>({ status: "rendering", pagesSoFar: 0 });
 
-  useFocusTrap(rootRef);
+  useFocusTrap(rootRef, { onEscape: onClose });
 
   useEffect(() => {
     const container = pagesRef.current;
     if (!container) return;
     let cancelled = false;
+    // paged.js can fire the per-page callback dozens of times a second on a
+    // long document; coalesce to at most one state update (and re-render)
+    // per animation frame instead of one per page.
+    let rafId = 0;
+    let latestCount = 0;
 
     setState({ status: "rendering", pagesSoFar: 0 });
     renderPaged(html, container, options, (pagesSoFar) => {
-      if (!cancelled) setState({ status: "rendering", pagesSoFar });
+      latestCount = pagesSoFar;
+      if (rafId || cancelled) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = 0;
+        if (!cancelled) setState({ status: "rendering", pagesSoFar: latestCount });
+      });
     })
       .then((pages) => {
         if (!cancelled) setState({ status: "ready", pages });
@@ -45,18 +55,10 @@ export function PrintPreview({ html, options, onClose }: PrintPreviewProps) {
 
     return () => {
       cancelled = true;
+      if (rafId) cancelAnimationFrame(rafId);
       cleanupPaged(container);
     };
   }, [html, options]);
-
-  // Esc closes, like the other modals.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
 
   const fallback = () => {
     onClose();

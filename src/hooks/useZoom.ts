@@ -1,5 +1,5 @@
 import { useCallback, useEffect, type RefObject } from "react";
-import { loadSettings, type Settings } from "../lib/settings";
+import type { Settings } from "../lib/settings";
 
 /**
  * Zoom actions (50–200%) persisted in settings, plus Ctrl+scroll on the
@@ -7,17 +7,19 @@ import { loadSettings, type Settings } from "../lib/settings";
  */
 export function useZoom(
   scrollRef: RefObject<HTMLDivElement | null>,
-  updateSettings: (patch: Partial<Settings>) => void
+  updateSettings: (patch: Partial<Settings>) => void,
+  settingsRef: RefObject<Settings>
 ) {
   const setZoomAbs = useCallback(
     (z: number) => updateSettings({ zoom: Math.min(200, Math.max(50, Math.round(z))) }),
     [updateSettings]
   );
 
-  // Read the freshest value from storage so keyboard/wheel steps never go stale.
+  // settingsRef is always current, so a relative step (+/-10) never goes
+  // stale even though this callback's identity is stable.
   const adjustZoom = useCallback(
-    (delta: number) => setZoomAbs((loadSettings().zoom || 100) + delta),
-    [setZoomAbs]
+    (delta: number) => setZoomAbs((settingsRef.current.zoom || 100) + delta),
+    [setZoomAbs, settingsRef]
   );
 
   useEffect(() => {

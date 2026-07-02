@@ -27,23 +27,17 @@ import { useCitationRegistry } from "./hooks/useCitationRegistry";
 import { useAppLifecycle } from "./hooks/useAppLifecycle";
 import { useSettings } from "./state/SettingsContext";
 import { EditorProvider } from "./state/EditorContext";
+import { PAGE_SIZES } from "./lib/pageGeometry";
+import { effectiveLayoutFor, patchDocLayout, type DocLayout } from "./editor/DocLayout";
 import "./App.css";
-
-const PAGE_DIMS: Record<string, { width: string; height: string; pxHeight: number }> = {
-  classic: { width: "760px", height: "auto", pxHeight: Infinity },
-  a4: { width: "210mm", height: "297mm", pxHeight: 1123 },
-  a5: { width: "148mm", height: "210mm", pxHeight: 794 },
-  letter: { width: "215.9mm", height: "279.4mm", pxHeight: 1056 },
-  a3: { width: "297mm", height: "420mm", pxHeight: 1587 },
-};
 
 function App() {
   const editorRef = useRef<Editor | null>(null);
 
-  const { settings, updateSettings, remember } = useSettings();
+  const { settings, settingsRef, updateSettings, remember } = useSettings();
 
   const scrollRef = useRef<HTMLDivElement>(null);
-  const { setZoomAbs, adjustZoom } = useZoom(scrollRef, updateSettings);
+  const { setZoomAbs, adjustZoom } = useZoom(scrollRef, updateSettings, settingsRef);
 
   const {
     tabs,
@@ -61,16 +55,15 @@ function App() {
   } = useDocumentTabs(editorRef, {
     // Invoked at event time, so referencing the autosave api (declared below)
     // is safe — it exists before any switch/close can happen.
-    onLeaveDirtyTab: (tab, html) => {
+    onLeaveDirtyTab: (tab, html, layout) => {
       cancelAutosave();
-      queueSave(tab, html).catch(() => {}); // failure shows in the status bar
+      queueSave(tab, html, layout).catch(() => {}); // failure shows in the status bar
     },
     onCloseTab: (id) => forgetTab(id),
     onOpened: remember,
   });
 
   const {
-    status: saveStatus,
     queueSave,
     schedule: scheduleAutosave,
     cancel: cancelAutosave,
@@ -96,6 +89,7 @@ function App() {
     queueSave,
     cancelAutosave,
     remember,
+    settings,
   });
 
   const [showSettings, setShowSettings] = useState(false);
@@ -106,12 +100,7 @@ function App() {
   const [showSearch, setShowSearch] = useState(false);
   const [showVersionHistory, setShowVersionHistory] = useState(false);
 
-  const pageFormat = settings.pageFormat || "classic";
-  const pageMargins = settings.pageMargins || { top: 56, bottom: 56, left: 72, right: 72 };
   const zoomFactor = (settings.zoom || 100) / 100;
-
-  const dims = PAGE_DIMS[pageFormat] || PAGE_DIMS.classic;
-  const isPaginated = pageFormat !== "classic";
 
   const markDirty = useCallback(() => {
     const id = activeIdRef.current;
@@ -130,6 +119,16 @@ function App() {
   });
   editorRef.current = editor;
 
+  // Page/print layout (format, margins, header/footer, heading numbers) is a
+  // doc attribute (editor/DocLayout.ts), not a Setting — it travels with the
+  // document and Ctrl+Z reverts it like any other edit. `settings` is only
+  // the fallback for a document that's never had its own layout set.
+  const docLayout = effectiveLayoutFor(editor, settings);
+  const pageFormat = docLayout.pageFormat;
+  const pageMargins = docLayout.pageMargins;
+  const dims = PAGE_SIZES[pageFormat] || PAGE_SIZES.classic;
+  const isPaginated = pageFormat !== "classic";
+
   // Spellcheck: drive the WebView's native checker via DOM attributes so it stays
   // reactive to settings (WebView2 uses system dictionaries; WebKitGTK uses hunspell).
   useEffect(() => {
@@ -139,10 +138,10 @@ function App() {
     dom.setAttribute("lang", settings.docLang || "pt-BR");
   }, [editor, settings.spellcheck, settings.docLang]);
 
-  // Heading numbering lives in plugin state; keep it in sync with the setting.
+  // Heading numbering lives in plugin state; keep it in sync with the doc's layout.
   useEffect(() => {
-    editor?.commands.setHeadingNumbers(settings.numberHeadings === true);
-  }, [editor, settings.numberHeadings]);
+    editor?.commands.setHeadingNumbers(docLayout.numberHeadings);
+  }, [editor, docLayout.numberHeadings]);
 
   // Same for tracked-changes recording.
   useEffect(() => {
@@ -154,19 +153,19 @@ function App() {
   // Local AI engine, shared by the side panel and the selection bubble menu.
   const ai = useLocalAi(editor, settings, updateSettings);
 
-  useAppLifecycle({ editor, editorRef, tabsRef, activeIdRef, setTabs, setActiveId, openDocFile });
+  useAppLifecycle({ editor, editorRef, tabsRef, activeIdRef, setTabs, setActiveId, openDocFile, queueSave, cancelAutosave });
 
   // ---- Templates ----
   const handleApplyTemplate = useCallback(
     (tmpl: DocTemplate) => {
-      updateSettings({
+      if (!editor) return;
+      patchDocLayout(editor, settings, {
         pageFormat: tmpl.pageFormat,
         pageMargins: tmpl.margins,
         ...(tmpl.header && { pageHeader: tmpl.header }),
         ...(tmpl.footer && { pageFooter: tmpl.footer }),
         ...(tmpl.chromeOnFirst !== undefined && { pageChromeOnFirst: tmpl.chromeOnFirst }),
       });
-      if (!editor) return;
       // Deferred out of the React event: setContent instantiates NodeViews
       // (TOC, bibliography) through flushSync, which React rejects mid-render.
       setTimeout(() => {
@@ -183,7 +182,7 @@ function App() {
         }
       }, 0);
     },
-    [editor, updateSettings, markDirty]
+    [editor, settings, markDirty]
   );
 
   // ---- Versioning ----
@@ -214,12 +213,19 @@ function App() {
         const raw = await invoke<string>("load_version", { docPath: at.filePath, versionId });
         const json = JSON.parse(raw);
         editor.commands.setContent(json, { emitUpdate: false });
+        // setContent({emitUpdate:false}) fires no onUpdate, so bump the edit
+        // sequence by hand — otherwise a save already in flight for the
+        // pre-restore content can complete afterward and clear `dirty`,
+        // leaving the restored content unsaved with no warning on quit.
+        noteEdit(at.id);
         setTabs((ts) => ts.map((t) => (t.id === at.id ? { ...t, doc: json, dirty: true } : t)));
+        const restoredLayout = (editor.state.doc.attrs.layout as DocLayout | null) ?? null;
+        queueSave({ id: at.id, filePath: at.filePath, format: at.format }, editor.getHTML(), restoredLayout).catch(() => {});
       } catch (e) {
         window.alert(`Erro ao restaurar versão:\n${e}`);
       }
     },
-    [editor]
+    [editor, noteEdit, setTabs, queueSave, tabsRef, activeIdRef]
   );
 
   useKeyboardShortcuts({
@@ -241,7 +247,7 @@ function App() {
       padding: `${pageMargins.top}px ${pageMargins.right}px ${pageMargins.bottom}px ${pageMargins.left}px`,
     };
     if (pageFormat !== "classic") {
-      style.width = dims.width;
+      style.width = dims.widthCss;
     }
     return style;
   }, [pageFormat, dims, pageMargins]);
@@ -279,21 +285,24 @@ function App() {
           <div className="editor-main">
             <div className="editor-scroll" ref={scrollRef}>
               {showSearch && <SearchBar onClose={() => setShowSearch(false)} />}
-              <div className={`pages-container${isPaginated ? " paginated" : ""}`} style={{ zoom: zoomFactor }}>
+              <div className="pages-container" style={{ zoom: zoomFactor }}>
                 <div className={`page${isPaginated ? " fixed" : ""}`} style={pageStyle}>
                   <EditorContent editor={editor} />
                 </div>
               </div>
             </div>
-            <StatusBar
-              onZoomChange={setZoomAbs}
-              saveStatus={saveStatus}
-            />
+            <StatusBar onZoomChange={setZoomAbs} activeTabId={activeId} />
           </div>
           {aiOpen && <AiPanel editor={editor} ai={ai} onClose={() => setAiOpen(false)} />}
         </div>
       </EditorProvider>
-      {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
+      {showSettings && (
+        <SettingsModal
+          onClose={() => setShowSettings(false)}
+          docLayout={docLayout}
+          onDocLayoutChange={(patch) => editor && patchDocLayout(editor, settings, patch)}
+        />
+      )}
       {showVersionHistory && activeTab && (
         <VersionHistory
           tab={activeTab}

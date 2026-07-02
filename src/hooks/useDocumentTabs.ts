@@ -1,7 +1,9 @@
 import { useCallback, useRef, useState, type RefObject } from "react";
 import type { Editor } from "@tiptap/react";
 import type { DocFile, DocFormat } from "../lib/document";
+import type { DocLayout } from "../editor/DocLayout";
 import { Tab, EMPTY_DOC, newTab, tabTitle } from "../lib/tabs";
+import { useLatest } from "./useLatest";
 
 /** The slice of a tab that a disk write needs (filePath guaranteed present). */
 export interface SavableTab {
@@ -12,11 +14,25 @@ export interface SavableTab {
 
 export interface DocumentTabsOptions {
   /** A dirty tab with a file on disk is losing focus; persist it. */
-  onLeaveDirtyTab?: (tab: SavableTab, html: string) => void;
+  onLeaveDirtyTab?: (tab: SavableTab, html: string, layout: DocLayout | null) => void;
   /** A tab was closed — drop any per-tab bookkeeping keyed by its id. */
   onCloseTab?: (id: string) => void;
   /** A document landed in a tab (recents bookkeeping). */
   onOpened?: (path: string) => void;
+}
+
+/** The outgoing tab's layout, straight from the live editor (source of truth
+ *  for whichever tab is currently active). */
+function currentLayout(editor: Editor): DocLayout | null {
+  return (editor.state.doc.attrs.layout as DocLayout | null) ?? null;
+}
+
+/** Apply a layout to the doc without an undo step — used right after opening
+ *  a file, since the loaded layout is the document's starting state, not a
+ *  user edit the way an in-app layout change is. */
+function seedLayout(editor: Editor, layout: DocLayout | null): void {
+  if (!layout) return;
+  editor.view.dispatch(editor.state.tr.setDocAttribute("layout", layout).setMeta("addToHistory", false));
 }
 
 /**
@@ -31,15 +47,12 @@ export function useDocumentTabs(editorRef: RefObject<Editor | null>, opts: Docum
   const [activeId, setActiveId] = useState<string>(first.current.id);
 
   // Refs so timers / editor callbacks always see fresh state.
-  const tabsRef = useRef(tabs);
-  tabsRef.current = tabs;
-  const activeIdRef = useRef(activeId);
-  activeIdRef.current = activeId;
+  const tabsRef = useLatest(tabs);
+  const activeIdRef = useLatest(activeId);
 
   // Latest-ref for the callbacks: they may close over values created after
   // this hook runs (e.g. the autosave queue), so they're re-read per call.
-  const optsRef = useRef(opts);
-  optsRef.current = opts;
+  const optsRef = useLatest(opts);
 
   const markTabDirty = useCallback((id: string) => {
     setTabs((ts) => ts.map((t) => (t.id === id && !t.dirty ? { ...t, dirty: true } : t)));
@@ -58,7 +71,8 @@ export function useDocumentTabs(editorRef: RefObject<Editor | null>, opts: Docum
     if (old?.dirty && old.filePath) {
       optsRef.current.onLeaveDirtyTab?.(
         { id: old.id, filePath: old.filePath, format: old.format },
-        editor.getHTML()
+        editor.getHTML(),
+        currentLayout(editor)
       );
     }
     setTabs((ts) => ts.map((t) => (t.id === oldId ? { ...t, doc: json } : t)));
@@ -70,6 +84,16 @@ export function useDocumentTabs(editorRef: RefObject<Editor | null>, opts: Docum
     const editor = editorRef.current;
     if (!editor) return;
     const oldId = activeIdRef.current;
+    const old = tabsRef.current.find((t) => t.id === oldId);
+    // Persist the outgoing tab, same as switchTab — a blank new tab must
+    // never leave unsaved work behind on the one it replaced as active.
+    if (old?.dirty && old.filePath) {
+      optsRef.current.onLeaveDirtyTab?.(
+        { id: old.id, filePath: old.filePath, format: old.format },
+        editor.getHTML(),
+        currentLayout(editor)
+      );
+    }
     const json = editor.getJSON();
     const t = newTab();
     setTabs((ts) => ts.map((x) => (x.id === oldId ? { ...x, doc: json } : x)).concat(t));
@@ -86,13 +110,24 @@ export function useDocumentTabs(editorRef: RefObject<Editor | null>, opts: Docum
 
     if (reuse) {
       editor.commands.setContent(doc.html, { emitUpdate: false });
+      seedLayout(editor, doc.layout);
       const json = editor.getJSON();
       setTabs((ts) =>
         ts.map((t) => (t.id === oldId ? { ...t, filePath: doc.path, format: doc.format, doc: json, dirty: false } : t))
       );
     } else {
+      // Persist the outgoing tab before its content is overwritten below —
+      // opening a file must never silently drop the previously active tab.
+      if (active?.dirty && active.filePath) {
+        optsRef.current.onLeaveDirtyTab?.(
+          { id: active.id, filePath: active.filePath, format: active.format },
+          editor.getHTML(),
+          currentLayout(editor)
+        );
+      }
       const oldJson = editor.getJSON();
       editor.commands.setContent(doc.html, { emitUpdate: false });
+      seedLayout(editor, doc.layout);
       const newJson = editor.getJSON();
       const t = newTab({ filePath: doc.path, format: doc.format, doc: newJson, dirty: false });
       setTabs((ts) => ts.map((x) => (x.id === oldId ? { ...x, doc: oldJson } : x)).concat(t));

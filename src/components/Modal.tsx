@@ -1,4 +1,4 @@
-import { useEffect, useRef, type CSSProperties, type ReactNode } from "react";
+import { useRef, type CSSProperties, type ReactNode } from "react";
 import { useFocusTrap } from "../hooks/useFocusTrap";
 
 interface ModalProps {
@@ -15,15 +15,7 @@ interface ModalProps {
  */
 export function Modal({ title, onClose, children, boxStyle }: ModalProps) {
   const boxRef = useRef<HTMLDivElement>(null);
-  useFocusTrap(boxRef);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  useFocusTrap(boxRef, { onEscape: onClose });
 
   return (
     <div className="modal-backdrop" onClick={onClose}>

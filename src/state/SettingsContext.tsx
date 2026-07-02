@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode, type RefObject } from "react";
 import {
   Recent,
   Settings,
@@ -9,9 +9,14 @@ import {
   saveSettings,
 } from "../lib/settings";
 import { useCustomFonts } from "../hooks/useCustomFonts";
+import { useLatest } from "../hooks/useLatest";
 
 export interface SettingsContextValue {
   settings: Settings;
+  /** Always-current settings, for callbacks with a stable identity (e.g. a
+   *  native wheel listener) that would otherwise close over a stale value
+   *  instead of re-reading localStorage on every call. */
+  settingsRef: RefObject<Settings>;
   updateSettings: (patch: Partial<Settings>) => void;
   recents: Recent[];
   remember: (path: string) => void;
@@ -25,6 +30,7 @@ const SettingsCtx = createContext<SettingsContextValue | null>(null);
 export function SettingsProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<Settings>(() => loadSettings());
   const [recents, setRecents] = useState<Recent[]>(() => loadRecents());
+  const settingsRef = useLatest(settings);
 
   useEffect(() => {
     applyTheme(settings.theme);
@@ -42,7 +48,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const { systemFonts, handleImportFont } = useCustomFonts(settings.customFonts || [], updateSettings);
 
   const value = useMemo<SettingsContextValue>(
-    () => ({ settings, updateSettings, recents, remember, systemFonts, importFont: handleImportFont }),
+    () => ({ settings, settingsRef, updateSettings, recents, remember, systemFonts, importFont: handleImportFont }),
     [settings, updateSettings, recents, remember, systemFonts, handleImportFont]
   );
 
