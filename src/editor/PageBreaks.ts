@@ -201,6 +201,93 @@ function trailingBand(pos: number, pageCount: number, ctx: ChromeContext): Decor
   );
 }
 
+interface LineRect {
+  top: number;
+  bottom: number;
+  left: number;
+}
+
+/**
+ * The rendered line boxes of a textblock, grouped from the raw client rects
+ * (one raw rect per inline run) into one entry per visual line. Rects that
+ * overlap vertically belong to the same line -- handles mixed font sizes,
+ * super/subscripts, inline math, etc.
+ */
+function paragraphLines(dom: HTMLElement): LineRect[] {
+  const range = document.createRange();
+  range.selectNodeContents(dom);
+  const rects = Array.from(range.getClientRects()).filter((r) => r.height > 0);
+  rects.sort((a, b) => a.top - b.top);
+  const lines: LineRect[] = [];
+  for (const r of rects) {
+    const last = lines[lines.length - 1];
+    if (last && r.top < last.bottom - 1) {
+      last.top = Math.min(last.top, r.top);
+      last.bottom = Math.max(last.bottom, r.bottom);
+      last.left = Math.min(last.left, r.left);
+    } else {
+      lines.push({ top: r.top, bottom: r.bottom, left: r.left });
+    }
+  }
+  return lines;
+}
+
+/**
+ * Turn the document into break units (M2). Most top-level blocks are one
+ * atomic unit; a multi-line PARAGRAPH becomes one unit per line so a break
+ * can fall between its lines (mid-paragraph split, as Word does). The first
+ * line's unit breaks at the block boundary (a clean whole-paragraph push);
+ * later lines break at their in-paragraph start position, found via
+ * `posAtCoords`. Headings, images, tables and lists stay atomic for now
+ * (headings to avoid orphan fragments; the rest can't split yet).
+ */
+function measureUnits(view: EditorView, zoomFactor: number): MeasuredBlock[] {
+  const { doc } = view.state;
+  const units: MeasuredBlock[] = [];
+  doc.forEach((node, offset) => {
+    const dom = view.nodeDOM(offset) as HTMLElement | null;
+    const isManualBreak = node.type.name === "pageBreak";
+    if (!dom || dom.nodeType !== 1) {
+      units.push({ offset, height: 0, isManualBreak });
+      return;
+    }
+    const box = dom.getBoundingClientRect();
+    const blockHeight = box.height / zoomFactor;
+    if (node.type.name !== "paragraph") {
+      units.push({ offset, height: blockHeight, isManualBreak });
+      return;
+    }
+    const lines = paragraphLines(dom);
+    if (lines.length <= 1) {
+      units.push({ offset, height: blockHeight, isManualBreak: false });
+      return;
+    }
+    const lineUnits: MeasuredBlock[] = [];
+    let ok = true;
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      // Height as the gap to the next line's top (last line runs to the
+      // block bottom) so the units sum to the block height -- keeps
+      // pagination consistent with the block-level measurement.
+      const nextTop = i + 1 < lines.length ? lines[i + 1].top : box.bottom;
+      const height = (nextTop - line.top) / zoomFactor;
+      let pos = offset;
+      if (i > 0) {
+        const at = view.posAtCoords({ left: line.left + 1, top: (line.top + line.bottom) / 2 });
+        if (!at || at.pos <= lineUnits[i - 1].offset) {
+          ok = false; // can't resolve a clean split point -> fall back to atomic
+          break;
+        }
+        pos = at.pos;
+      }
+      lineUnits.push({ offset: pos, height, isManualBreak: false });
+    }
+    if (ok) units.push(...lineUnits);
+    else units.push({ offset, height: blockHeight, isManualBreak: false });
+  });
+  return units;
+}
+
 /**
  * Where real page breaks fall, plus the per-page header/footer chrome. Reads
  * rendered heights straight from the DOM (view.nodeDOM), normalized by the
@@ -219,14 +306,25 @@ function buildPageBreakState(view: EditorView): PageBreakState {
   const printable = printableHeightPx(layout.pageFormat, layout.pageMargins);
   const zoomFactor = (settings.zoom || 100) / 100;
 
-  const blocks: MeasuredBlock[] = [];
-  doc.forEach((node, offset) => {
-    const dom = view.nodeDOM(offset) as HTMLElement | null;
-    const height = dom ? dom.getBoundingClientRect().height / zoomFactor : 0;
-    blocks.push({ offset, height, isManualBreak: node.type.name === "pageBreak" });
+  // Measure the CLEAN content flow: neutralize the existing gap decorations
+  // first. A mid-paragraph gap from the previous cycle sits INSIDE a
+  // paragraph's box, so it would inflate that paragraph's measured height
+  // and its line rects, destabilizing the break points cycle after cycle.
+  const gaps = Array.from(view.dom.querySelectorAll<HTMLElement>(".page-gap"));
+  const prevDisplay = gaps.map((g) => g.style.display);
+  gaps.forEach((g) => {
+    g.style.display = "none";
   });
+  let units: MeasuredBlock[];
+  try {
+    units = measureUnits(view, zoomFactor);
+  } finally {
+    gaps.forEach((g, i) => {
+      g.style.display = prevDisplay[i];
+    });
+  }
 
-  const points = computeBreakPoints(blocks, printable);
+  const points = computeBreakPoints(units, printable);
   const pageCount = points.length + 1;
 
   const ctx: ChromeContext = {

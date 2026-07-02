@@ -60,4 +60,20 @@ describe("computeBreakPoints", () => {
   it("lista vazia não quebra", () => {
     expect(computeBreakPoints([], 1000)).toEqual([]);
   });
+
+  it("M2: unidades de linha do mesmo parágrafo quebram no meio (offset intra-parágrafo)", () => {
+    // measureUnits emite uma unidade por linha; a 1ª linha quebra no início
+    // do bloco (offset 10) e as demais nas posições internas do parágrafo
+    // (11, 12, ...). computeBreakPoints não distingue bloco de linha -- só
+    // acumula altura e quebra antes da unidade que estoura.
+    const lineUnits = [
+      { offset: 10, height: 400, isManualBreak: false }, // linha 1 (início do parágrafo)
+      { offset: 11, height: 400, isManualBreak: false }, // linha 2 (dentro do parágrafo)
+      { offset: 12, height: 400, isManualBreak: false }, // linha 3 (dentro do parágrafo)
+    ];
+    const points = computeBreakPoints(lineUnits, 1000);
+    // 400+400 cabe; +400 estoura -> quebra antes da linha 3, num offset que
+    // é interno ao parágrafo (12), não um limite de bloco.
+    expect(points).toEqual([{ offset: 12, pageNumber: 2 }]);
+  });
 });

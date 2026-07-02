@@ -1363,8 +1363,15 @@ body {
    these provide the vertical page margins that `.page` no longer pads in
    paginated mode. */
 .ProseMirror .page-gap {
+  display: block;
+  width: 100%;
   user-select: none;
   pointer-events: none;
+  /* Mid-paragraph splits (M2) put this block inside a <p>: reset inline
+     text flow so the bands stack full-width regardless of the paragraph's
+     alignment/indent. */
+  text-align: initial;
+  text-indent: 0;
 }
 
 /* White margin band: same fill as the sheet, so it reads as part of the page,
