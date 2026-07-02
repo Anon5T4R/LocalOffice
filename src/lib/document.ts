@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
-import { markdownToHtml, htmlToMarkdown, mathFromPandoc, stripFootnoteBackrefs } from "./markdown";
+import { markdownToHtml, htmlToMarkdown, fieldsFromPandoc, mathFromPandoc, stripFootnoteBackrefs } from "./markdown";
 import { bakeCitationsHtml } from "./citationStore";
 import { bakeHeadingNumbers, detectManualNumberingSequence, stripBakedHeadingNumbers } from "./bakedHeadingNumbers";
 import { bakeCaptionNumbers } from "./captionNumbers";
@@ -109,7 +109,11 @@ async function readToHtml(path: string, format: DocFormat): Promise<{ html: stri
     // No embedded layout for pandoc formats — fall back to Settings, same as
     // the numberHeadings-driven strip did before layout became per-document.
     const stripUnmarked = loadSettings().numberHeadings === true;
-    return resolveHeadingNumbers(mathFromPandoc(reviewFromPandoc(stripFootnoteBackrefs(html))), stripUnmarked, null);
+    return resolveHeadingNumbers(
+      fieldsFromPandoc(mathFromPandoc(reviewFromPandoc(stripFootnoteBackrefs(html)))),
+      stripUnmarked,
+      null
+    );
   }
   const rawFile = await invoke<string>("read_text_file", { path });
   const { raw, layout } = extractLayout(rawFile);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { htmlToMarkdown, markdownToHtml, mathFromPandoc, stripFootnoteBackrefs } from "./markdown";
+import { fieldsFromPandoc, htmlToMarkdown, markdownToHtml, mathFromPandoc, stripFootnoteBackrefs } from "./markdown";
 
 describe("markdownToHtml", () => {
   it("converte estrutura básica", async () => {
@@ -149,5 +149,67 @@ describe("stripFootnoteBackrefs", () => {
       '<a class="footnote-back" href="#y">↩</a>' +
       '<a role="doc-backlink" href="#z">↩</a></p>';
     expect(stripFootnoteBackrefs(html)).toBe("<p>nota</p>");
+  });
+});
+
+describe("fieldsFromPandoc (import de docx acadêmico)", () => {
+  it("legenda com bookmark vira caption node com data-ref-id, sem o número congelado", () => {
+    const html = '<p><span id="_Ref_fig1" class="anchor"></span>Figura 1 — Diagrama do metodo</p>';
+    const out = fieldsFromPandoc(html);
+    expect(out).toContain('data-caption="figure"');
+    expect(out).toContain('data-ref-id="_Ref_fig1"');
+    expect(out).toContain("Diagrama do metodo");
+    expect(out).not.toContain("Figura 1"); // número recomputado ao vivo
+  });
+
+  it("legenda de tabela sem bookmark (formato com travessão) também converte — round-trip do nosso export", () => {
+    const html = "<p>Tabela 12 – Resultados por grupo</p>";
+    const out = fieldsFromPandoc(html);
+    expect(out).toContain('data-caption="table"');
+    expect(out).toContain("Resultados por grupo");
+  });
+
+  it("parágrafo 'Figura' sem travessão nem bookmark NÃO vira legenda", () => {
+    const html = "<p>Figura 1 aparece na capa do argumento e a tese segue.</p>";
+    const out = fieldsFromPandoc(html);
+    expect(out).not.toContain("data-caption");
+    expect(out).toContain("Figura 1 aparece na capa");
+  });
+
+  it("título-alvo de REF ganha data-ref-id; link interno vira crossref", () => {
+    const html =
+      '<h2><span id="_Ref_sec" class="anchor"></span>Metodologia</h2>' +
+      '<p>Ver <a href="#_Ref_sec">Seção 2</a>.</p>';
+    const out = fieldsFromPandoc(html);
+    expect(out).toContain('<h2 data-ref-id="_Ref_sec">Metodologia</h2>');
+    expect(out).toContain('data-crossref="_Ref_sec"');
+    expect(out).not.toContain("<a href=");
+  });
+
+  it("links de nota de rodapé e externos ficam intocados", () => {
+    const html =
+      '<p><span id="_Ref_x" class="anchor"></span>Figura 1 — L</p>' +
+      '<p>ver nota<a href="#fn1" class="footnote-ref"><sup>1</sup></a> e <a href="https://x.com">site</a></p>';
+    const out = fieldsFromPandoc(html);
+    expect(out).toContain('href="#fn1"');
+    expect(out).toContain('href="https://x.com"');
+  });
+
+  it("HTML real do pandoc (auditoria 13.1) recupera legendas e as duas crossrefs", () => {
+    const html =
+      '<p><span id="_Ref_fig1" class="anchor"></span>Figura 1 — Diagrama do metodo proposto</p>' +
+      "<table><tbody><tr><td>A</td></tr></tbody></table>" +
+      '<p><span id="_Ref_tab1" class="anchor"></span>Tabela 1 — Resultados por grupo</p>' +
+      '<p>Ver a <a href="#_Ref_fig1">Figura 1</a> e a <a href="#_Ref_tab1">Tabela 1</a> para detalhes.</p>';
+    const out = fieldsFromPandoc(html);
+    expect(out).toContain('data-caption="figure"');
+    expect(out).toContain('data-caption="table"');
+    expect((out.match(/data-crossref=/g) ?? []).length).toBe(2);
+    expect(out).toContain("Ver a <span");
+  });
+
+  it("HTML sem anchors nem rótulos de legenda passa reto (early-bail)", () => {
+    const html = "<p>texto comum, sem legendas nem bookmarks</p>";
+    expect(fieldsFromPandoc(html)).toBe(html);
   });
 });

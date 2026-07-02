@@ -32,7 +32,22 @@ pub(crate) async fn import_via_pandoc(
     // (the JS side maps them to review marks). --mathjax makes equations come
     // out as \(...\) with the TeX source intact (the default renders them to
     // lossy Unicode); the JS side maps those spans to math nodes.
-    run_pandoc(
+    //
+    // --extract-media + --embed-resources: without them pandoc emits
+    // <img src="media/rIdN.png"> — a path INSIDE the zip that exists nowhere
+    // on disk, so every embedded image comes in broken and is silently lost
+    // on the next save. Extracting to a temp dir and embedding in the same
+    // invocation turns them into data URIs (the app's native image storage;
+    // documents stay self-contained). The temp dir is a side effect of the
+    // conversion only — removed right after, success or failure.
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    let media_dir = std::env::temp_dir().join(format!("writer-import-media-{}", stamp));
+    let media_arg = format!("--extract-media={}", media_dir.to_string_lossy());
+
+    let result = run_pandoc(
         &app,
         &[
             path.as_str(),
@@ -43,10 +58,15 @@ pub(crate) async fn import_via_pandoc(
             "--wrap=none",
             "--track-changes=all",
             "--mathjax",
+            media_arg.as_str(),
+            "--embed-resources",
         ],
         "import",
     )
-    .await
+    .await;
+
+    let _ = tokio::fs::remove_dir_all(&media_dir).await;
+    result
 }
 
 /// Convert a BibTeX/BibLaTeX bibliography into CSL-JSON via the pandoc sidecar.
