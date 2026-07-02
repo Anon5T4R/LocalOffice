@@ -30,6 +30,10 @@ pub(crate) struct VersionInfo {
 #[derive(Default)]
 pub(crate) struct VersionStore(tokio::sync::Mutex<()>);
 
+/// Snapshots per document. On overflow the oldest one is pruned (standard
+/// version-history behavior) so app_data can't grow without bound.
+const MAX_VERSIONS_PER_DOC: usize = 50;
+
 fn versions_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     // Pure path builder (no I/O). Writers call `ensure_versions_dir` first;
     // readers tolerate the directory being absent.
@@ -121,6 +125,16 @@ pub(crate) async fn save_version(
     let _guard = store.0.lock().await;
     let mut meta = read_meta(&app, &doc_path).await?;
     meta.versions.push(VersionEntry { id, name, ts });
+
+    // Prune the oldest snapshots past the cap (entries are pushed in
+    // chronological order, so draining from the front removes the oldest).
+    while meta.versions.len() > MAX_VERSIONS_PER_DOC {
+        let victim = meta.versions.remove(0);
+        if let Ok(cpath) = version_content_path(&app, &doc_path, &victim.id) {
+            let _ = tokio::fs::remove_file(&cpath).await; // best-effort
+        }
+    }
+
     write_meta(&app, &meta).await?;
     Ok(())
 }
