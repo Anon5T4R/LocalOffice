@@ -12,6 +12,13 @@ export interface Tab {
 
 export const EMPTY_DOC: JSONContent = { type: "doc", content: [{ type: "paragraph" }] };
 
+/** State of the tab-save pipeline (autosave and manual), shown in the status bar. */
+export type SaveStatus =
+  | { kind: "idle" }
+  | { kind: "saving" }
+  | { kind: "saved"; at: number }
+  | { kind: "error"; message: string; at: number };
+
 let counter = 0;
 export function newTab(partial: Partial<Tab> = {}): Tab {
   counter += 1;

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Editor, useEditorState } from "@tiptap/react";
 import { PageFormat } from "../lib/settings";
+import { SaveStatus } from "../lib/tabs";
 
 const PAGE_HEIGHT_PX: Record<string, number> = {
   classic: 980,
@@ -27,9 +28,11 @@ interface StatusBarProps {
   measuredPages?: number;
   /** Word-count goal (0/undefined = off). */
   wordGoal?: number;
+  /** Autosave/save pipeline state; errors stay visible until a save succeeds. */
+  saveStatus?: SaveStatus;
 }
 
-export function StatusBar({ editor, pageFormat = "classic", zoom, zoomFactor, onZoomChange, measuredPages, wordGoal }: StatusBarProps) {
+export function StatusBar({ editor, pageFormat = "classic", zoom, zoomFactor, onZoomChange, measuredPages, wordGoal, saveStatus }: StatusBarProps) {
   const { words, chars, charsNoSpaces, paragraphs, breaks, selWords, selChars } = useEditorState({
     editor,
     selector: ({ editor }) => {
@@ -83,6 +86,12 @@ export function StatusBar({ editor, pageFormat = "classic", zoom, zoomFactor, on
         </span>
       )}
       <span title="Tempo de leitura estimado (~200 palavras/min)">{readMin} min de leitura</span>
+      {saveStatus?.kind === "error" && (
+        <span className="status-save-error" title={saveStatus.message}>
+          ⚠ Falha ao salvar automaticamente — Ctrl+S para tentar de novo
+        </span>
+      )}
+      {saveStatus?.kind === "saving" && <span className="status-saving">Salvando…</span>}
       {wordGoal ? (
         <span
           className={"status-goal" + (words >= wordGoal ? " is-done" : "")}

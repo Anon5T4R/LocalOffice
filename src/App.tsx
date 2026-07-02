@@ -23,13 +23,14 @@ import * as citationStore from "./lib/citationStore";
 import { DocTemplate, applyTemplateContent } from "./lib/templates";
 import {
   DocFile,
+  DocFormat,
   baseName,
   openDocument,
   openDocumentPath,
   saveDocumentAs,
   saveDocumentTo,
 } from "./lib/document";
-import { Tab, EMPTY_DOC, newTab, tabTitle } from "./lib/tabs";
+import { Tab, EMPTY_DOC, SaveStatus, newTab, tabTitle } from "./lib/tabs";
 import {
   Recent,
   Settings,
@@ -169,8 +170,13 @@ function App() {
 
   const remember = useCallback((path: string) => setRecents(addRecent(path)), []);
 
+  // Monotonic edit counter per tab: a finished save only clears `dirty` when
+  // no edit happened while the write was in flight.
+  const editSeq = useRef(new Map<string, number>());
+
   const markDirty = useCallback(() => {
     const id = activeIdRef.current;
+    editSeq.current.set(id, (editSeq.current.get(id) ?? 0) + 1);
     setTabs((ts) => ts.map((t) => (t.id === id && !t.dirty ? { ...t, dirty: true } : t)));
   }, []);
 
@@ -181,7 +187,33 @@ function App() {
   const autosaveTimer = useRef<number | null>(null);
   const firstDirtyAt = useRef(0);
 
-  const savingRef = useRef(false);
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>({ kind: "idle" });
+
+  // Every disk write of a tab goes through this chain, so two writes to the
+  // same file can never interleave (autosave, switch-tab save, manual save).
+  const saveChain = useRef<Promise<unknown>>(Promise.resolve());
+
+  const queueSave = useCallback(
+    (tab: { id: string; filePath: string; format: DocFormat }, html: string): Promise<void> => {
+      const seq = editSeq.current.get(tab.id) ?? 0;
+      const job = saveChain.current.then(async () => {
+        setSaveStatus({ kind: "saving" });
+        try {
+          await saveDocumentTo(tab.filePath, html, tab.format);
+        } catch (e) {
+          setSaveStatus({ kind: "error", message: String(e), at: Date.now() });
+          throw e;
+        }
+        setSaveStatus({ kind: "saved", at: Date.now() });
+        if ((editSeq.current.get(tab.id) ?? 0) === seq) {
+          setTabs((ts) => ts.map((t) => (t.id === tab.id ? { ...t, dirty: false } : t)));
+        }
+      });
+      saveChain.current = job.catch(() => {}); // a failed save must not block the next one
+      return job;
+    },
+    []
+  );
 
   const cancelAutosave = useCallback(() => {
     if (autosaveTimer.current) {
@@ -316,11 +348,19 @@ function App() {
       const json = editor.getJSON();
       const target = tabsRef.current.find((t) => t.id === id);
       if (!target) return;
+      // Persist the outgoing tab on its way out — switching must never leave
+      // unsaved work behind. Fire-and-forget: a failure keeps the tab dirty
+      // and surfaces in the status bar.
+      const old = tabsRef.current.find((t) => t.id === oldId);
+      if (old?.dirty && old.filePath) {
+        cancelAutosave();
+        queueSave({ id: old.id, filePath: old.filePath, format: old.format }, editor.getHTML()).catch(() => {});
+      }
       setTabs((ts) => ts.map((t) => (t.id === oldId ? { ...t, doc: json } : t)));
       editor.commands.setContent(target.doc, { emitUpdate: false });
       setActiveId(id);
     },
-    [editor]
+    [editor, queueSave, cancelAutosave]
   );
 
   const newBlankTab = useCallback(() => {
@@ -365,6 +405,7 @@ function App() {
       if (!t || !editor) return;
       if (t.dirty && !window.confirm(`"${tabTitle(t)}" tem alterações não salvas. Fechar mesmo assim?`)) return;
 
+      editSeq.current.delete(id);
       const idx = tabsRef.current.findIndex((x) => x.id === id);
       const remaining = tabsRef.current.filter((x) => x.id !== id);
 
@@ -433,14 +474,13 @@ function App() {
       return;
     }
     try {
-      await saveDocumentTo(at.filePath, editor.getHTML(), at.format);
-      setTabs((ts) => ts.map((t) => (t.id === at.id ? { ...t, dirty: false } : t)));
+      await queueSave({ id: at.id, filePath: at.filePath, format: at.format }, editor.getHTML());
       remember(at.filePath);
       cancelAutosave();
     } catch (e) {
       window.alert(`Não foi possível salvar:\n${e}`);
     }
-  }, [editor, handleSaveAs, remember, cancelAutosave]);
+  }, [editor, handleSaveAs, remember, cancelAutosave, queueSave]);
 
   const handleInsertImage = useCallback(async () => {
     if (!editor) return;
@@ -614,23 +654,23 @@ function App() {
   }, []);
 
   // ---- Debounced autosave (only when idle; never while actively typing) ----
+  const doAutosaveRef = useRef<() => void>(() => {});
   const doAutosave = useCallback(() => {
-    if (savingRef.current) return;
     autosaveTimer.current = null;
     firstDirtyAt.current = 0;
     if (!editor) return;
     const at = tabsRef.current.find((t) => t.id === activeIdRef.current);
     if (at && at.filePath && at.dirty) {
-      const id = at.id;
-      savingRef.current = true;
-      saveDocumentTo(at.filePath, editor.getHTML(), at.format)
-        .then(() => {
-          setTabs((ts) => ts.map((t) => (t.id === id ? { ...t, dirty: false } : t)));
-          savingRef.current = false;
-        })
-        .catch(() => { savingRef.current = false; });
+      queueSave({ id: at.id, filePath: at.filePath, format: at.format }, editor.getHTML()).catch(() => {
+        // The tab stays dirty and the status bar shows the failure; retry with
+        // backoff so a transient error (file lock, cloud sync) heals itself.
+        if (!autosaveTimer.current) {
+          autosaveTimer.current = window.setTimeout(() => doAutosaveRef.current(), 30_000);
+        }
+      });
     }
-  }, [editor]);
+  }, [editor, queueSave]);
+  doAutosaveRef.current = doAutosave;
 
   const scheduleAutosave = useCallback(() => {
     const at = tabsRef.current.find((t) => t.id === activeIdRef.current);
@@ -851,6 +891,7 @@ function App() {
               onZoomChange={setZoomAbs}
               measuredPages={isPaginated ? ghostPages.length + 1 : undefined}
               wordGoal={settings.wordGoal || 0}
+              saveStatus={saveStatus}
             />
           )}
         </div>

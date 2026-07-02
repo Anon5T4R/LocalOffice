@@ -447,6 +447,15 @@ body {
   color: #16a34a;
 }
 
+.status-save-error {
+  color: #dc2626;
+  font-weight: 600;
+}
+
+.status-saving {
+  opacity: 0.7;
+}
+
 .status-zoom {
   margin-left: auto;
   display: inline-flex;
