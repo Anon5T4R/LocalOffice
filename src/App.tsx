@@ -26,6 +26,7 @@ import { useDocumentTabs } from "./hooks/useDocumentTabs";
 import { useAutosave } from "./hooks/useAutosave";
 import { useFileOperations } from "./hooks/useFileOperations";
 import { useZoom } from "./hooks/useZoom";
+import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 import {
   Recent,
   Settings,
@@ -547,49 +548,19 @@ function App() {
     };
   }, [editor, openDocFile]);
 
-  // ---- Keyboard shortcuts ----
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "F11") {
-        e.preventDefault();
-        setFocusMode((v) => !v);
-        return;
-      }
-      if (e.key === "Escape") setFocusMode(false);
-      if (!(e.ctrlKey || e.metaKey)) return;
-      const k = e.key.toLowerCase();
-      if (k === "s" && e.shiftKey) {
-        e.preventDefault();
-        handleSaveAs();
-      } else if (k === "s") {
-        e.preventDefault();
-        handleSave();
-      } else if (k === "o") {
-        e.preventDefault();
-        handleOpen();
-      } else if (k === "n" || k === "t") {
-        e.preventDefault();
-        newBlankTab();
-      } else if (k === "f" && !e.altKey) {
-        e.preventDefault();
-        setShowSearch(true);
-      } else if (k === "w") {
-        e.preventDefault();
-        closeTab(activeIdRef.current);
-      } else if (k === "=" || k === "+") {
-        e.preventDefault();
-        adjustZoom(10);
-      } else if (k === "-" || k === "_") {
-        e.preventDefault();
-        adjustZoom(-10);
-      } else if (k === "0") {
-        e.preventDefault();
-        setZoomAbs(100);
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [handleSave, handleSaveAs, handleOpen, newBlankTab, closeTab, adjustZoom, setZoomAbs]);
+  useKeyboardShortcuts({
+    save: handleSave,
+    saveAs: handleSaveAs,
+    open: handleOpen,
+    newTab: newBlankTab,
+    closeActiveTab: () => closeTab(activeIdRef.current),
+    openSearch: () => setShowSearch(true),
+    toggleFocusMode: () => setFocusMode((v) => !v),
+    exitFocusMode: () => setFocusMode(false),
+    zoomIn: () => adjustZoom(10),
+    zoomOut: () => adjustZoom(-10),
+    zoomReset: () => setZoomAbs(100),
+  });
 
   const pageStyle = useMemo(() => {
     const style: Record<string, string> = {
