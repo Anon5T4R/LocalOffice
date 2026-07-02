@@ -1,5 +1,7 @@
 import type { Editor } from "@tiptap/react";
 import type { CustomFont, PageMargins } from "../../lib/settings";
+import { DEFAULT_MARGINS } from "../../lib/pageGeometry";
+import { shallowEqual } from "../../lib/equality";
 
 /** Rewrite the case of the current selection's text, preserving each run's marks. */
 export function transformCase(editor: Editor, fn: (s: string) => string): void {
@@ -30,19 +32,15 @@ export const CASE_FNS: Record<string, (s: string) => string> = {
 };
 
 export const MARGIN_PRESETS: Record<string, PageMargins> = {
-  normal: { top: 56, bottom: 56, left: 72, right: 72 },
+  normal: DEFAULT_MARGINS,
   narrow: { top: 36, bottom: 36, left: 36, right: 36 },
   moderate: { top: 48, bottom: 48, left: 60, right: 60 },
   wide: { top: 72, bottom: 72, left: 96, right: 96 },
 };
 
-export function marginsEqual(a: PageMargins, b: PageMargins): boolean {
-  return a.top === b.top && a.bottom === b.bottom && a.left === b.left && a.right === b.right;
-}
-
 export function currentMarginPreset(m: PageMargins): string {
   for (const [key, val] of Object.entries(MARGIN_PRESETS)) {
-    if (marginsEqual(m, val)) return key;
+    if (shallowEqual(m, val)) return key;
   }
   return "personalizado";
 }

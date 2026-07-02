@@ -1,4 +1,5 @@
 import { DEFAULT_MODELS_DIR } from "./ai";
+import { DEFAULT_MARGINS } from "./pageGeometry";
 
 export type Theme = "auto" | "light" | "dark";
 export type PageFormat = "classic" | "a4" | "a5" | "letter" | "a3";
@@ -58,8 +59,6 @@ export interface Settings {
   /** Word-count goal shown in the status bar (0 = off). */
   wordGoal: number;
 }
-
-const DEFAULT_MARGINS: PageMargins = { top: 56, bottom: 56, left: 72, right: 72 };
 
 const DEFAULTS: Settings = {
   theme: "auto",

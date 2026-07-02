@@ -1,5 +1,6 @@
 import { advanceHeadingCounter, newHeadingCounters } from "../editor/HeadingNumbers";
 import { bakeCitationsInto } from "./citationStore";
+import { PAGE_SIZES } from "./pageGeometry";
 import { HeaderFooterSpec, PageFormat, PageMargins } from "./settings";
 
 /**
@@ -31,15 +32,6 @@ export interface PrintOptions {
   /** Bake automatic heading numbers (1, 1.1…) into the printed text. */
   numberHeadings: boolean;
 }
-
-/** CSS `size` for each page format ("classic" free-flow prints as A4). */
-const PAGE_SIZE_CSS: Record<PageFormat, string> = {
-  classic: "210mm 297mm",
-  a4: "210mm 297mm",
-  a5: "148mm 210mm",
-  letter: "215.9mm 279.4mm",
-  a3: "297mm 420mm",
-};
 
 // ---------------------------------------------------------------------------
 // Print preprocessing
@@ -196,7 +188,7 @@ function buildPrintCss(opts: PrintOptions): string {
 
   return `
     @page {
-      size: ${PAGE_SIZE_CSS[opts.pageFormat] || PAGE_SIZE_CSS.a4};
+      size: ${PAGE_SIZES[opts.pageFormat]?.printSizeCss || PAGE_SIZES.a4.printSizeCss};
       margin: ${m.top}px ${m.right}px ${m.bottom}px ${m.left}px;
       ${boxes.join("\n      ")}
     }
@@ -355,7 +347,7 @@ export function printLegacy(contentHtml: string, opts: PrintOptions): void {
   // page number, URL); the visual margins live in .print-content padding.
   const style = document.createElement("style");
   style.textContent = `@media print { @page { size: ${
-    PAGE_SIZE_CSS[opts.pageFormat] || PAGE_SIZE_CSS.a4
+    PAGE_SIZES[opts.pageFormat]?.printSizeCss || PAGE_SIZES.a4.printSizeCss
   }; margin: 0; } }`;
   root.appendChild(style);
   document.body.appendChild(root);
