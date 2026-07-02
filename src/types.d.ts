@@ -33,5 +33,7 @@ declare module "pagedjs" {
       stylesheets: string[],
       renderTo: HTMLElement
     ): Promise<{ total: number }>;
+    /** Event emitter: re-emits the chunker's "page" per rendered page, plus "rendering"/"rendered". */
+    on(event: "page" | "rendering" | "rendered", handler: (payload: unknown) => void): void;
   }
 }
