@@ -137,11 +137,33 @@ fn resolve_llama_server(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     Err("llama-server não encontrado (runtime de IA ausente)".into())
 }
 
-/// Block until the given TCP port accepts a connection, or time out.
-async fn wait_for_port(port: u16, secs: u64) -> Result<(), String> {
+/// Block until OUR llama-server accepts a connection on the port, or fail.
+///
+/// Checks the child's liveness before every connect attempt: if another
+/// program already owns the port, llama-server dies at bind — but a plain
+/// port probe would connect to the foreign listener and report success,
+/// and the app would then stream document text to whatever process that
+/// is. A dead child also fails fast on bad models / OOM instead of
+/// spinning out the full timeout.
+async fn wait_for_llm(state: &Mutex<LlmState>, port: u16, secs: u64) -> Result<(), String> {
     let addr: SocketAddr = ([127, 0, 0, 1], port).into();
     let attempts = secs * 4;
     for _ in 0..attempts {
+        {
+            let mut s = lock_llm(state);
+            match s.child.as_mut() {
+                None => return Err("llama-server foi encerrado durante a inicialização".into()),
+                Some(child) => {
+                    if let Ok(Some(status)) = child.try_wait() {
+                        s.child = None;
+                        return Err(format!(
+                            "llama-server encerrou ao iniciar ({}). A porta {} pode estar em uso por outro programa, ou o modelo é inválido.",
+                            status, port
+                        ));
+                    }
+                }
+            }
+        }
         if let Ok(Ok(_)) = tokio::time::timeout(Duration::from_millis(200), TcpStream::connect(addr)).await {
             return Ok(());
         }
@@ -202,7 +224,7 @@ pub(crate) async fn start_llm(
         s.model = model_path;
     }
 
-    wait_for_port(port, 180).await?;
+    wait_for_llm(&state, port, 180).await?;
     Ok(port)
 }
 

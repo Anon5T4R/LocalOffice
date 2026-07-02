@@ -18,15 +18,15 @@ pub(crate) async fn read_file_base64(path: String) -> Result<String, String> {
     Ok(base64::engine::general_purpose::STANDARD.encode(bytes))
 }
 
-/// Write a UTF-8 text file to disk, creating parent dirs if needed.
+/// Atomic text write, shared by every persistence path (documents here,
+/// version snapshots/meta in versions.rs).
 ///
 /// Writes to a sibling `.tmp` file and renames it into place: a rename is
 /// atomic on both NTFS and POSIX filesystems, so a process killed mid-write
 /// (window force-closed, `exit_app` racing the write) leaves either the old
 /// file intact or the new one complete — never a truncated partial write.
-#[tauri::command]
-pub(crate) async fn write_text_file(path: String, contents: String) -> Result<(), String> {
-    if let Some(parent) = Path::new(&path).parent() {
+pub(crate) async fn write_atomic(path: &str, contents: &str) -> Result<(), String> {
+    if let Some(parent) = Path::new(path).parent() {
         if !parent.as_os_str().is_empty() {
             tokio::fs::create_dir_all(parent)
                 .await
@@ -37,9 +37,15 @@ pub(crate) async fn write_text_file(path: String, contents: String) -> Result<()
     tokio::fs::write(&tmp_path, contents)
         .await
         .map_err(|e| format!("Falha ao salvar '{}': {}", path, e))?;
-    tokio::fs::rename(&tmp_path, &path)
+    tokio::fs::rename(&tmp_path, path)
         .await
         .map_err(|e| format!("Falha ao salvar '{}': {}", path, e))
+}
+
+/// Write a UTF-8 text file to disk, creating parent dirs if needed (atomic).
+#[tauri::command]
+pub(crate) async fn write_text_file(path: String, contents: String) -> Result<(), String> {
+    write_atomic(&path, &contents).await
 }
 
 /// Delete a file if it exists; a no-op if it doesn't.

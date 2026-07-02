@@ -94,9 +94,9 @@ async fn write_meta(app: &tauri::AppHandle, meta: &VersionMeta) -> Result<(), St
     ensure_versions_dir(app).await?;
     let path = version_meta_path(app, &meta.doc_path)?;
     let raw = serde_json::to_string_pretty(meta).map_err(|e| format!("serializar meta: {}", e))?;
-    tokio::fs::write(&path, raw)
-        .await
-        .map_err(|e| format!("salvar meta: {}", e))
+    // Atomic (tmp+rename): this file is the index of the whole version
+    // history — a crash mid-write must not corrupt it.
+    crate::io::write_atomic(&path.to_string_lossy(), &raw).await
 }
 
 /// Save a named version of the document.
@@ -131,9 +131,7 @@ pub(crate) async fn save_version(
     }
 
     let cpath = version_content_path(&app, &doc_path, &id)?;
-    tokio::fs::write(&cpath, &content)
-        .await
-        .map_err(|e| format!("salvar versão: {}", e))?;
+    crate::io::write_atomic(&cpath.to_string_lossy(), &content).await?;
 
     meta.versions.push(VersionEntry { id, name, ts });
 

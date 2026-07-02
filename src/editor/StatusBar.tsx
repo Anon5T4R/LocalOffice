@@ -28,12 +28,14 @@ export function StatusBar({ onZoomChange, activeTabId }: StatusBarProps) {
   const { pageFormat, pageMargins: margins } = effectiveLayout(editor.state.doc, settings);
   const zoom = settings.zoom || 100;
   const wordGoal = settings.wordGoal || 0;
-  const { words, chars, charsNoSpaces, paragraphs, pageBreakPages, selWords, selChars } = useEditorState({
+  const { words, chars, charsNoSpaces, paragraphs, breaks, pageBreakPages, selWords, selChars } = useEditorState({
     editor,
     selector: ({ editor }) => {
       const text = editor.getText();
+      let breaks = 0;
       let paragraphs = 0;
       editor.state.doc.descendants((n) => {
+        if (n.type.name === "pageBreak") breaks += 1;
         if ((n.type.name === "paragraph" || n.type.name === "heading") && n.textContent.trim()) paragraphs += 1;
       });
       const { from, to, empty } = editor.state.selection;
@@ -43,10 +45,12 @@ export function StatusBar({ onZoomChange, activeTabId }: StatusBarProps) {
         chars: text.replace(/\n/g, "").length,
         charsNoSpaces: text.replace(/\s/g, "").length,
         paragraphs,
+        breaks,
         // Authoritative for paginated formats: the exact count the page-gap
-        // decorations were drawn from (editor/PageBreaks.ts). "classic" has
-        // no fixed page height, so this is always 1 there -- heightPages
-        // below (scrollHeight/printable) is what classic actually uses.
+        // decorations were drawn from (editor/PageBreaks.ts, which already
+        // accounts for manual breaks). "classic" has no fixed page height,
+        // so this is always 1 there -- classic uses heightPages + breaks
+        // below instead.
         pageBreakPages: getPageCount(editor.state),
         selWords: countWords(selText),
         selChars: selText.replace(/\n/g, "").length,
@@ -72,7 +76,9 @@ export function StatusBar({ onZoomChange, activeTabId }: StatusBarProps) {
     return () => ro.disconnect();
   }, [editor, pageFormat, margins, zoomFactor]);
 
-  const pages = pageFormat === "classic" ? heightPages : pageBreakPages;
+  // Classic is free-flow on screen but the PDF still honors manual page
+  // breaks (break-after: page), so the estimate can never be below breaks+1.
+  const pages = pageFormat === "classic" ? Math.max(heightPages, breaks + 1) : pageBreakPages;
   const readMin = Math.max(1, Math.round(words / WORDS_PER_MINUTE));
 
   return (
