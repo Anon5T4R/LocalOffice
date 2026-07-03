@@ -45,3 +45,12 @@ o checklist completo antes de mergear a branch (aí também com `npm run tauri b
 - [ ] Template aplica sem apagar aba errada.
 - [ ] Histórico de versões: salvar, listar, restaurar, excluir.
 - [ ] Configurações: tema claro/escuro, meta de palavras na status bar.
+
+## Normas / templates (v0.14 — detalhes no GUIA-DE-USO.md)
+- [ ] Citações reais: `.bib` em ⚙ → `[@` num doc ABNT → autor-data + seção
+      Referências formatada no preview de impressão.
+- [ ] Round-trip Word: doc ABNT salvo como `.docx` abre no Word com corpo em
+      **12pt** (não 9pt), "Figura N" renumera com F9 (SEQ), crossrefs
+      clicáveis (REF); reaberto no LocalOffice sem números duplicados.
+- [ ] PDF impresso do ABNT: páginas 1–3 sem número, Introdução exibe "3" no
+      topo direito, contagem do diálogo = contagem da status bar.

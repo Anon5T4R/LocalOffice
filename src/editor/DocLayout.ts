@@ -23,6 +23,22 @@ export interface DocLayout {
   /** Named per-document styles (lib/docStyles.ts); null = app defaults.
    *  Optional so layouts saved before this field existed keep parsing. */
   styles?: DocStyles | null;
+  /** First PHYSICAL page that shows header/footer. Overrides
+   *  pageChromeOnFirst when set (ABNT: 4 — capa, folha de rosto e sumário
+   *  ficam sem número). Optional/null = derive from pageChromeOnFirst. */
+  pageChromeFrom?: number | null;
+  /** Number DISPLAYED on that first chrome page (ABNT: 3, porque a capa não
+   *  conta na numeração). Optional/null = the physical page number. */
+  pageNumberStart?: number | null;
+}
+
+/** Resolve where the page chrome starts and what number it displays there:
+ *  `{page}` on physical page p renders `startValue + (p - from)`. The single
+ *  source both the editor decorations (PageBreaks) and the print pipeline
+ *  (useFileOperations -> pdf.ts) resolve through. */
+export function chromeRange(layout: DocLayout): { from: number; startValue: number } {
+  const from = Math.max(1, layout.pageChromeFrom ?? (layout.pageChromeOnFirst ? 1 : 2));
+  return { from, startValue: layout.pageNumberStart ?? from };
 }
 
 declare module "@tiptap/core" {
@@ -50,6 +66,8 @@ export function settingsLayout(settings: Settings): DocLayout {
     pageChromeOnFirst: settings.pageChromeOnFirst !== false,
     numberHeadings: settings.numberHeadings === true,
     styles: null,
+    pageChromeFrom: null,
+    pageNumberStart: null,
   };
 }
 

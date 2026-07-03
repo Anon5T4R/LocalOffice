@@ -4,7 +4,7 @@ import { Plugin, PluginKey } from "@tiptap/pm/state";
 import type { EditorState } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import type { EditorView } from "@tiptap/pm/view";
-import { effectiveLayout } from "./DocLayout";
+import { chromeRange, effectiveLayout } from "./DocLayout";
 import { loadSettings } from "../lib/settings";
 import type { HeaderFooterSpec, PageMargins } from "../lib/settings";
 import { printableHeightPx } from "../lib/pageGeometry";
@@ -188,7 +188,10 @@ export function computeBreakPoints(blocks: MeasuredBlock[], printable: number): 
 interface ChromeContext {
   header: HeaderFooterSpec;
   footer: HeaderFooterSpec;
-  chromeOnFirst: boolean;
+  /** First physical page that shows chrome, and the number displayed there
+   *  (editor/DocLayout.ts chromeRange — ABNT starts at 4 displaying "3"). */
+  chromeFrom: number;
+  numberStart: number;
   title: string;
   date: string;
   pages: number;
@@ -200,17 +203,19 @@ interface ChromeContext {
  *  fragmentation), here the page numbers are literal -- the editor knows
  *  exactly which page each band belongs to. */
 function resolveChrome(template: string, page: number, ctx: ChromeContext): string {
+  const shift = ctx.numberStart - ctx.chromeFrom;
   return template
-    .replace(/\{page\}/g, String(page))
-    .replace(/\{pages\}/g, String(ctx.pages))
+    .replace(/\{page\}/g, String(page + shift))
+    .replace(/\{pages\}/g, String(ctx.pages + shift))
     .replace(/\{title\}/g, ctx.title)
     .replace(/\{date\}/g, ctx.date);
 }
 
 /** A header or footer row (left/center/right slots), or null when it should
- *  not show: suppressed on the first page, or entirely empty. */
+ *  not show: suppressed on pre-textual pages (before chromeFrom), or entirely
+ *  empty. */
 function chromeRow(kind: "header" | "footer", spec: HeaderFooterSpec, page: number, ctx: ChromeContext): HTMLElement | null {
-  if (page === 1 && !ctx.chromeOnFirst) return null;
+  if (page < ctx.chromeFrom) return null;
   const slots = [spec.left, spec.center, spec.right].map((s) => resolveChrome(s, page, ctx));
   if (slots.every((s) => !s.trim())) return null;
   const row = document.createElement("div");
@@ -492,10 +497,12 @@ function buildPageBreakState(view: EditorView): PageBreakState {
 
   const pageCount = points.length + 1;
 
+  const range = chromeRange(layout);
   const ctx: ChromeContext = {
     header: layout.pageHeader,
     footer: layout.pageFooter,
-    chromeOnFirst: layout.pageChromeOnFirst,
+    chromeFrom: range.from,
+    numberStart: range.startValue,
     title: (view.dom as HTMLElement).dataset.docTitle ?? "",
     date: new Date().toLocaleDateString(),
     pages: pageCount,
@@ -510,7 +517,7 @@ function buildPageBreakState(view: EditorView): PageBreakState {
     decorations: DecorationSet.create(doc, decorations),
     pageCount,
     points,
-    chromeKey: JSON.stringify([ctx.header, ctx.footer, ctx.chromeOnFirst, ctx.title, ctx.date, ctx.margins, pageCount, layout.pageFormat]),
+    chromeKey: JSON.stringify([ctx.header, ctx.footer, ctx.chromeFrom, ctx.numberStart, ctx.title, ctx.date, ctx.margins, pageCount, layout.pageFormat]),
   };
 }
 

@@ -134,11 +134,41 @@ export function SettingsModal({ onClose, docLayout, onDocLayoutChange }: Setting
               <input
                 type="checkbox"
                 checked={docLayout.pageChromeOnFirst}
+                disabled={docLayout.pageChromeFrom != null}
                 onChange={(e) => onDocLayoutChange({ pageChromeOnFirst: e.target.checked })}
               />{" "}
               Mostrar cabeçalho/rodapé na primeira página
             </span>
           </label>
+          <div className="ai-field">
+            <span>Numeração avançada (ABNT: número só na parte textual)</span>
+            <div className="hf-row">
+              <span className="modal-note" style={{ margin: 0 }}>Mostrar a partir da página física</span>
+              <input
+                type="number"
+                min={1}
+                style={{ width: 64 }}
+                placeholder="auto"
+                value={docLayout.pageChromeFrom ?? ""}
+                onChange={(e) => {
+                  const v = parseInt(e.target.value, 10);
+                  onDocLayoutChange({ pageChromeFrom: Number.isNaN(v) ? null : Math.max(1, v) });
+                }}
+              />
+              <span className="modal-note" style={{ margin: 0 }}>numerada como</span>
+              <input
+                type="number"
+                min={0}
+                style={{ width: 64 }}
+                placeholder="igual"
+                value={docLayout.pageNumberStart ?? ""}
+                onChange={(e) => {
+                  const v = parseInt(e.target.value, 10);
+                  onDocLayoutChange({ pageNumberStart: Number.isNaN(v) ? null : v });
+                }}
+              />
+            </div>
+          </div>
           <p className="modal-note">
             Use os marcadores {"{page}"}, {"{pages}"}, {"{title}"} e {"{date}"} — ex.: "Página {"{page}"} de {"{pages}"}".
           </p>

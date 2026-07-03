@@ -5,7 +5,8 @@ import { pickImageDataUri } from "../lib/images";
 import type { PrintOptions } from "../lib/pdf";
 import type { Settings } from "../lib/settings";
 import { tabTitle, type Tab } from "../lib/tabs";
-import { effectiveLayout, type DocLayout } from "../editor/DocLayout";
+import { chromeRange, effectiveLayout, type DocLayout } from "../editor/DocLayout";
+import { getPageCount } from "../editor/PageBreaks";
 import type { SavableTab } from "./useDocumentTabs";
 
 interface FileOperationsDeps {
@@ -114,7 +115,9 @@ export function useFileOperations({
         margins: layout.pageMargins,
         header: layout.pageHeader,
         footer: layout.pageFooter,
-        chromeOnFirst: layout.pageChromeOnFirst,
+        chromeFrom: chromeRange(layout).from,
+        numberStart: chromeRange(layout).startValue,
+        pageCount: getPageCount(editor.state),
         numberHeadings: layout.numberHeadings,
         styles: layout.styles ?? null,
       },

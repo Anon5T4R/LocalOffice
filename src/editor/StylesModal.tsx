@@ -4,6 +4,7 @@ import { useEditorInstance } from "../state/EditorContext";
 import { useSettings } from "../state/SettingsContext";
 import { effectiveLayout, patchDocLayout } from "./DocLayout";
 import { STYLE_TARGETS, type BlockStyle, type DocStyles } from "../lib/docStyles";
+import { ptToPx, pxToPt } from "../lib/fontUnits";
 
 const FONTS = ["", "Sans-serif", "Serif", "Monospace", "Arial", "Times New Roman", "Courier New", "Georgia", "Verdana"];
 const ALIGNS: { value: BlockStyle["align"] | ""; label: string }[] = [
@@ -37,7 +38,9 @@ export function StylesModal({ onClose }: { onClose: () => void }) {
       } else {
         const n = Number(value.replace(",", "."));
         if (Number.isNaN(n)) return d;
-        (cur as Record<string, unknown>)[prop] = n;
+        // O campo de tamanho fala pontos (a "fonte 12" da ABNT); o layout
+        // guarda px como todo o resto do motor (lib/fontUnits.ts).
+        (cur as Record<string, unknown>)[prop] = prop === "fontSizePx" ? ptToPx(n) : n;
       }
       const next = { ...d };
       if (Object.keys(cur).length === 0) delete next[key];
@@ -65,7 +68,7 @@ export function StylesModal({ onClose }: { onClose: () => void }) {
             <tr>
               <th>Estilo</th>
               <th>Fonte</th>
-              <th>Tam. (px)</th>
+              <th>Tam. (pt)</th>
               <th>Entrelinha</th>
               <th>Alinh.</th>
               <th>Antes (em)</th>
@@ -85,7 +88,7 @@ export function StylesModal({ onClose }: { onClose: () => void }) {
                       ))}
                     </select>
                   </td>
-                  <td><input type="number" min={6} max={96} value={num(s.fontSizePx)} onChange={(e) => patch(key, "fontSizePx", e.target.value)} /></td>
+                  <td><input type="number" min={6} max={96} step={0.5} value={num(s.fontSizePx === undefined ? undefined : pxToPt(s.fontSizePx))} onChange={(e) => patch(key, "fontSizePx", e.target.value)} /></td>
                   <td><input type="number" step={0.05} min={0.8} max={4} value={num(s.lineHeight)} onChange={(e) => patch(key, "lineHeight", e.target.value)} /></td>
                   <td>
                     <select value={s.align ?? ""} onChange={(e) => patch(key, "align", e.target.value)}>

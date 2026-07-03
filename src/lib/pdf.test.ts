@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { preparePrintHtml } from "./pdf";
+import { buildPrintCss, preparePrintHtml, type PrintOptions } from "./pdf";
 
 function parse(html: string): Document {
   return new DOMParser().parseFromString(html, "text/html");
@@ -111,5 +111,53 @@ describe("preparePrintHtml", () => {
     const html = '<p>ver <span data-citation="" data-keys="silva2020"></span></p>';
     const doc = parse(await preparePrintHtml(html, { numberHeadings: false }));
     expect(doc.querySelector("p")?.textContent).toBe("ver [@silva2020]");
+  });
+});
+
+describe("buildPrintCss (chrome por página)", () => {
+  const base: PrintOptions = {
+    title: "Doc",
+    pageFormat: "a4",
+    margins: { top: 113, bottom: 76, left: 113, right: 76 },
+    header: { left: "", center: "", right: "{page}" },
+    footer: { left: "", center: "", right: "" },
+    chromeFrom: 1,
+    numberStart: 1,
+    numberHeadings: false,
+    styles: null,
+  };
+
+  it("sem deslocamento: contador CSS e nenhuma regra por página", () => {
+    const css = buildPrintCss(base);
+    expect(css).toContain("@top-right { content: counter(page); }");
+    expect(css).not.toContain(":nth(");
+    expect(css).not.toContain("@page :first");
+  });
+
+  it("chromeFrom 2 (capa sem número) apaga o chrome da primeira página", () => {
+    const css = buildPrintCss({ ...base, chromeFrom: 2, numberStart: 2 });
+    expect(css).toContain("@page :first");
+    expect(css).toContain("@page :nth(1)");
+    expect(css).toContain("@top-right { content: none; }");
+    // Da página 2 em diante continua no contador (sem deslocamento).
+    expect(css).toContain("@top-right { content: counter(page); }");
+  });
+
+  it("ABNT (a partir da 4, numerada como 3): páginas pré-textuais em branco e números literais", () => {
+    const css = buildPrintCss({ ...base, chromeFrom: 4, numberStart: 3, pageCount: 6 });
+    for (const k of [1, 2, 3]) expect(css).toContain(`@page :nth(${k})`);
+    expect(css).toContain('@page :nth(4) { @top-right { content: "3"; } }');
+    expect(css).toContain('@page :nth(5) { @top-right { content: "4"; } }');
+    expect(css).toContain('@page :nth(6) { @top-right { content: "5"; } }');
+    // O contador físico saiu de cena para o {page} deslocado.
+    expect(css).not.toContain("counter(page)");
+  });
+
+  it("{pages} deslocado usa o total do editor; sem pageCount cai no contador físico", () => {
+    const footer = { left: "", center: "{page} de {pages}", right: "" };
+    const withCount = buildPrintCss({ ...base, footer, header: { left: "", center: "", right: "" }, chromeFrom: 2, numberStart: 1, pageCount: 5 });
+    expect(withCount).toContain('content: "1" " de " "4"');
+    const withoutCount = buildPrintCss({ ...base, footer, header: { left: "", center: "", right: "" }, chromeFrom: 2, numberStart: 1 });
+    expect(withoutCount).toContain('content: "1" " de " counter(pages)');
   });
 });

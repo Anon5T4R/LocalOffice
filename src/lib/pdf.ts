@@ -30,8 +30,16 @@ export interface PrintOptions {
   margins: PageMargins;
   header: HeaderFooterSpec;
   footer: HeaderFooterSpec;
-  /** Print header/footer on the first page too (off for cover pages). */
-  chromeOnFirst: boolean;
+  /** First physical page that prints header/footer (1 = all pages; 2 = skip
+   *  the cover; ABNT starter: 4). Resolved by editor/DocLayout.ts chromeRange
+   *  so editor and PDF read the same numbers. */
+  chromeFrom: number;
+  /** Number displayed on page `chromeFrom` (ABNT: 3 — a capa não conta). */
+  numberStart: number;
+  /** Editor page count. Bounds the per-page literal rules when the numbering
+   *  is offset (numberStart ≠ chromeFrom); without it, offset {pages} falls
+   *  back to the physical counter. */
+  pageCount?: number;
   /** Bake automatic heading numbers (1, 1.1…) into the printed text. */
   numberHeadings: boolean;
   /** Named per-document styles — MUST mirror what the editor rendered with,
@@ -199,9 +207,15 @@ export async function preparePrintHtml(
 
 /**
  * Translate a header/footer template into a CSS `content` value.
- * Text is emitted as quoted strings; {page}/{pages} become counters.
+ * Text is emitted as quoted strings; {page}/{pages} become counters — or
+ * literal numbers when `literal` is given (offset numbering has no CSS
+ * arithmetic, so those boxes are emitted per page with concrete values).
  */
-function cssContent(template: string, vars: { title: string; date: string }): string {
+function cssContent(
+  template: string,
+  vars: { title: string; date: string },
+  literal?: { page: number; pages: number | null }
+): string {
   const resolved = template
     .replace(/\{title\}/g, vars.title)
     .replace(/\{date\}/g, vars.date);
@@ -209,17 +223,23 @@ function cssContent(template: string, vars: { title: string; date: string }): st
     .split(/(\{page\}|\{pages\})/)
     .filter(Boolean)
     .map((part) => {
-      if (part === "{page}") return "counter(page)";
-      if (part === "{pages}") return "counter(pages)";
+      if (part === "{page}") return literal ? JSON.stringify(String(literal.page)) : "counter(page)";
+      if (part === "{pages}")
+        return literal && literal.pages !== null ? JSON.stringify(String(literal.pages)) : "counter(pages)";
       return JSON.stringify(part);
     });
   return parts.length ? parts.join(" ") : '""';
 }
 
 /** One margin box (e.g. "@top-right") with its content, or "" when unused. */
-function marginBox(box: string, template: string, vars: { title: string; date: string }): string {
+function marginBox(
+  box: string,
+  template: string,
+  vars: { title: string; date: string },
+  literal?: { page: number; pages: number | null }
+): string {
   if (!template.trim()) return "";
-  return `${box} { content: ${cssContent(template, vars)}; }`;
+  return `${box} { content: ${cssContent(template, vars, literal)}; }`;
 }
 
 /**
@@ -228,35 +248,58 @@ function marginBox(box: string, template: string, vars: { title: string; date: s
  * typography. Every selector is scoped under .print-content so the styles,
  * which paged.js re-injects into the live document, never leak into the app.
  */
-function buildPrintCss(opts: PrintOptions): string {
+export function buildPrintCss(opts: PrintOptions): string {
   const vars = {
     title: opts.title,
     date: new Date().toLocaleDateString(),
   };
   const m = opts.margins;
-  const boxes = [
-    marginBox("@top-left", opts.header.left, vars),
-    marginBox("@top-center", opts.header.center, vars),
-    marginBox("@top-right", opts.header.right, vars),
-    marginBox("@bottom-left", opts.footer.left, vars),
-    marginBox("@bottom-center", opts.footer.center, vars),
-    marginBox("@bottom-right", opts.footer.right, vars),
-  ].filter(Boolean);
+  const boxDefs: [string, string][] = [
+    ["@top-left", opts.header.left],
+    ["@top-center", opts.header.center],
+    ["@top-right", opts.header.right],
+    ["@bottom-left", opts.footer.left],
+    ["@bottom-center", opts.footer.center],
+    ["@bottom-right", opts.footer.right],
+  ];
+  const from = Math.max(1, opts.chromeFrom);
+  const shift = opts.numberStart - from; // displayed number = physical + shift
 
-  const firstPage = opts.chromeOnFirst
-    ? ""
-    : `@page :first {
-        @top-left { content: none; } @top-center { content: none; } @top-right { content: none; }
-        @bottom-left { content: none; } @bottom-center { content: none; } @bottom-right { content: none; }
-      }`;
+  // Offset page numbers can't come from counter(page) — CSS content has no
+  // arithmetic — so boxes that reference {page}/{pages} under a shift are
+  // emitted per page with concrete values; everything else stays on @page.
+  const needsLiteral = (tpl: string) => shift !== 0 && /\{pages?\}/.test(tpl);
+  const baseBoxes = boxDefs
+    .filter(([, tpl]) => tpl.trim() && !needsLiteral(tpl))
+    .map(([box, tpl]) => marginBox(box, tpl, vars));
+  const literalBoxes = boxDefs.filter(([, tpl]) => tpl.trim() && needsLiteral(tpl));
+
+  const pageRules: string[] = [];
+  // Pre-textual pages (before `from`): no chrome at all. :first doubles the
+  // common cover case for engines where :nth(1) is shaky.
+  const noneBoxes = boxDefs.map(([box]) => `${box} { content: none; }`).join(" ");
+  if (from >= 2) pageRules.push(`@page :first { ${noneBoxes} }`);
+  for (let k = 1; k < from; k++) pageRules.push(`@page :nth(${k}) { ${noneBoxes} }`);
+  if (literalBoxes.length) {
+    // Bounded by the editor's page count (convergence is verified) plus a
+    // safety margin so a straggler page never prints unnumbered.
+    const last = (opts.pageCount ?? 300) + 20;
+    const pagesShown = opts.pageCount !== undefined ? opts.pageCount + shift : null;
+    for (let k = from; k <= last; k++) {
+      const inner = literalBoxes
+        .map(([box, tpl]) => marginBox(box, tpl, vars, { page: k + shift, pages: pagesShown }))
+        .join(" ");
+      pageRules.push(`@page :nth(${k}) { ${inner} }`);
+    }
+  }
 
   return `
     @page {
       size: ${PAGE_SIZES[opts.pageFormat]?.printSizeCss || PAGE_SIZES.a4.printSizeCss};
       margin: ${m.top}px ${m.right}px ${m.bottom}px ${m.left}px;
-      ${boxes.join("\n      ")}
+      ${baseBoxes.join("\n      ")}
     }
-    ${firstPage}
+    ${pageRules.join("\n    ")}
 
     /* Metrics come from the SAME source as the editor's .ProseMirror rules
        (lib/contentTypography.ts) — that shared module is what keeps the PDF

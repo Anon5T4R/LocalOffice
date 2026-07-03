@@ -16,7 +16,11 @@ LocalOffice é um editor de documentos focado em privacidade e simplicidade. Tud
     
 -   **Ribbon estilo Word/OnlyOffice** com formatação completa (negrito, itálico, sublinhado, cor, realce, alinhamento…).
     
--   **Formatos**: Markdown, HTML, **DOCX** e **ODT** (via [pandoc](https://pandoc.org) embarcado).
+-   **Formatos**: Markdown, HTML, **DOCX**, **ODT** e **RTF** (via [pandoc](https://pandoc.org) embarcado) + export PDF paginado (WYSIWYG). Regra de ouro: *trabalhe em .md, entregue em .docx, publique em PDF* — detalhes por formato no [Guia de uso](docs/GUIA-DE-USO.md).
+    
+-   **Acadêmico completo**: modelos **ABNT/APA** com numeração de norma, citações offline (`.bib` do Zotero; ABNT/APA/Chicago/IEEE), legendas e referências cruzadas vivas (campos SEQ/REF nativos no Word), sumário e listas de figuras/tabelas, notas de rodapé, equações KaTeX→OMML. Fluxo passo a passo no [Guia de uso](docs/GUIA-DE-USO.md).
+    
+-   **Páginas reais no editor**: quebras de página, cabeçalho/rodapé e contagem idênticas ao PDF final (convergência por construção).
     
 -   **IA local**: roda modelos **GGUF** via [llama.cpp](https://github.com/ggml-org/llama.cpp) (build Vulkan, com fallback de CPU). Chat com streaming + ações sobre a seleção (resumir, reescrever, revisar). Tudo em `127.0.0.1`, **zero telemetria**.
     
