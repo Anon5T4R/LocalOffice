@@ -413,22 +413,63 @@ function buildPageBreakState(view: EditorView): PageBreakState {
       entries.push({ node, offset, dom, top: box.top, boxHeight: box.height });
     });
 
-    const blocks: MeasuredBlock[] = entries.map((e, i) => {
+    // Containers whose direct children become independent break units, so a
+    // page break can fall BETWEEN list items / quoted paragraphs instead of
+    // pushing the whole container (which could overflow a page). Their
+    // children stay atomic (no line-split inside containers), and a child's
+    // own nested content is part of its unit. Tables stay atomic: a break
+    // widget between <tr>s doesn't render meaningfully.
+    const SPLITTABLE_CONTAINERS = new Set(["bulletList", "orderedList", "blockquote"]);
+
+    const blocks: MeasuredBlock[] = [];
+    entries.forEach((e, i) => {
       const isManualBreak = e.node.type.name === "pageBreak";
-      if (!e.dom) return { offset: e.offset, height: 0, isManualBreak };
+      if (!e.dom) {
+        blocks.push({ offset: e.offset, height: 0, isManualBreak });
+        return;
+      }
       const next = entries[i + 1];
-      const outerHeight =
-        next && next.dom ? (next.top - e.top) / zoomFactor : e.boxHeight / zoomFactor;
+      const nextTop = next && next.dom ? next.top : e.top + e.boxHeight;
+      const outerHeight = (nextTop - e.top) / zoomFactor;
       const dom = e.dom;
       const offset = e.offset;
       const boxHeight = e.boxHeight / zoomFactor;
+
+      if (SPLITTABLE_CONTAINERS.has(e.node.type.name) && e.node.childCount > 1) {
+        // Partition the container's page fill among its children: child i
+        // runs to the next child's top; the first also absorbs the leading
+        // edge (container top margin/padding) and the last runs to the next
+        // top-level block (trailing padding + gap below). Sums to exactly
+        // the container's outer height, so pagination totals stay
+        // consistent with the atomic path.
+        const kids: { offset: number; top: number }[] = [];
+        e.node.forEach((_child, rel) => {
+          const abs = offset + 1 + rel;
+          const kdom = view.nodeDOM(abs) as HTMLElement | null;
+          if (kdom && kdom.nodeType === 1) kids.push({ offset: abs, top: kdom.getBoundingClientRect().top });
+        });
+        if (kids.length > 1) {
+          for (let k = 0; k < kids.length; k++) {
+            const start = k === 0 ? e.top : kids[k].top;
+            const end = k + 1 < kids.length ? kids[k + 1].top : nextTop;
+            blocks.push({
+              // Breaking before the first child = breaking before the container.
+              offset: k === 0 ? offset : kids[k].offset,
+              height: (end - start) / zoomFactor,
+              isManualBreak: false,
+            });
+          }
+          return;
+        }
+      }
+
       // Only plain paragraphs split by line; everything else stays atomic
-      // (headings avoid orphan fragments; images/tables/lists can't split yet).
+      // (headings avoid orphan fragments; images/tables can't split yet).
       const splitLines =
         e.node.type.name === "paragraph"
           ? () => measureSplit(view, dom, offset, outerHeight, boxHeight, zoomFactor)
           : undefined;
-      return { offset: e.offset, height: outerHeight, isManualBreak, splitLines };
+      blocks.push({ offset, height: outerHeight, isManualBreak, splitLines });
     });
     points = computeBreakPoints(blocks, printable);
   } finally {
