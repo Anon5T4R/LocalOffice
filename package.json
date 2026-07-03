@@ -2,7 +2,7 @@
   "name": "writer",
   "private": true,
   "license": "AGPL-3.0-or-later",
-  "version": "0.14.1",
+  "version": "0.14.2",
   "type": "module",
   "scripts": {
     "dev": "vite",
