@@ -55,6 +55,17 @@ describe("htmlToMarkdown", () => {
     expect(htmlToMarkdown(html)).toBe(md);
   });
 
+  it("preserva linhas em branco (parágrafos vazios) no round-trip via markdown", async () => {
+    const html = "<p>a</p><p></p><p></p><p>b</p>";
+    const md = htmlToMarkdown(html);
+    // Cada linha em branco vira um parágrafo com NBSP (markdown não tem
+    // sintaxe para parágrafo vazio; sem isso pandoc/marked descartam a linha).
+    expect(md).toContain("&nbsp;");
+    const back = await markdownToHtml(md);
+    // E volta a ser parágrafo vazio, idêntico a um Enter no editor.
+    expect((back.match(/<p><\/p>/g) ?? []).length).toBe(2);
+  });
+
   it("serializa citação de volta para sintaxe pandoc com espaços preservados", () => {
     const html = 'texto <span data-citation="" data-keys="silva2020"></span> e mais';
     expect(htmlToMarkdown(html)).toBe("texto [@silva2020] e mais\n");

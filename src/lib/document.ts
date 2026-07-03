@@ -5,6 +5,7 @@ import { bakeCitationsHtml } from "./citationStore";
 import { bakeHeadingNumbers, detectManualNumberingSequence, stripBakedHeadingNumbers } from "./bakedHeadingNumbers";
 import { bakeCaptionNumbers } from "./captionNumbers";
 import { bakeNativeFieldsForDocx } from "./docxFields";
+import { prepareForPandoc } from "./exportPrep";
 import { bakeReviewForDocx, reviewFromPandoc } from "./reviewExport";
 import { loadSettings } from "./settings";
 import { settingsLayout, type DocLayout } from "../editor/DocLayout";
@@ -156,14 +157,19 @@ export async function saveDocumentTo(
     // Word/ODT are one-way outputs for citations: bake them as formatted text
     // (a Word user without Zotero still reads the document correctly).
     // Comments and tracked changes become native Word review data.
-    const baked = bakeReviewForDocx(bakeCitationsHtml(html));
+    // prepareForPandoc then rewrites what only the app understands: page
+    // breaks (docx: raw OOXML marker; odt/rtf: dropped), TOC navs (baked
+    // entry list) and empty paragraphs (NBSP, or pandoc drops the line).
+    const baked = prepareForPandoc(bakeReviewForDocx(bakeCitationsHtml(html)), format);
     const hasCaptionsOrRefs = baked.includes("data-caption") || baked.includes("data-crossref");
     // pandoc's HTML reader can't turn our footnote markup into native notes,
-    // math spans into equations, or (docx only) captions/crossrefs into
-    // native Word fields — for docs with any of those we go through Markdown
-    // ([^n] / $latex$ / raw OOXML), which pandoc maps to real Word/ODT
-    // constructs. Plain docs stay on the higher-fidelity HTML path.
-    if (hasFootnotes(baked) || hasMath(baked) || (useNativeFields && hasCaptionsOrRefs)) {
+    // math spans into equations, or (docx only) captions/crossrefs/page
+    // breaks into native Word constructs — for docs with any of those we go
+    // through Markdown ([^n] / $latex$ / raw OOXML), which pandoc maps to
+    // real Word/ODT constructs. Plain docs stay on the higher-fidelity HTML
+    // path.
+    const hasOoxmlMarkers = baked.includes("data-ooxml");
+    if (hasFootnotes(baked) || hasMath(baked) || (useNativeFields && (hasCaptionsOrRefs || hasOoxmlMarkers))) {
       const forExport = useNativeFields ? bakeNativeFieldsForDocx(baked) : baked;
       await invoke("export_via_pandoc", { path, content: htmlToMarkdown(forExport), from: "markdown", to: format });
     } else {
