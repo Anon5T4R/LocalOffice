@@ -15,6 +15,16 @@ interface PageBreakState {
    *  fixed page height, so this plugin has no opinion -- StatusBar keeps its
    *  own scrollHeight-based estimate for that format). */
   pageCount: number;
+  /** The break points the decorations were built from, position-mapped
+   *  through every transaction — a remeasure that lands on the SAME points
+   *  skips the dispatch entirely, so the (expensive) widget re-render only
+   *  happens when a break actually moved. Measured on a 223-page document:
+   *  ~200ms per redraw, with ~2s spikes from re-laying-out 222 widgets. */
+  points: PageBreakPoint[];
+  /** Fingerprint of everything besides content that shapes the chrome
+   *  (margins, header/footer templates, title, page count…) — a change here
+   *  forces a redraw even when no break moved. */
+  chromeKey: string;
 }
 
 const key = new PluginKey<PageBreakState>("pageBreaks");
@@ -379,7 +389,9 @@ function buildPageBreakState(view: EditorView): PageBreakState {
   const layout = effectiveLayout(doc, settings);
   // "classic" is explicitly free-flow (see pageGeometry.ts) -- no fixed
   // page height, so there are no pages and no chrome.
-  if (layout.pageFormat === "classic") return { decorations: DecorationSet.empty, pageCount: 1 };
+  if (layout.pageFormat === "classic") {
+    return { decorations: DecorationSet.empty, pageCount: 1, points: [], chromeKey: "classic" };
+  }
 
   const printable = printableHeightPx(layout.pageFormat, layout.pageMargins);
   const zoomFactor = (settings.zoom || 100) / 100;
@@ -494,7 +506,22 @@ function buildPageBreakState(view: EditorView): PageBreakState {
   points.forEach((p, i) => decorations.push(betweenGap(p.offset, i + 1, i + 2, ctx)));
   decorations.push(trailingBand(doc.content.size, pageCount, ctx));
 
-  return { decorations: DecorationSet.create(doc, decorations), pageCount };
+  return {
+    decorations: DecorationSet.create(doc, decorations),
+    pageCount,
+    points,
+    chromeKey: JSON.stringify([ctx.header, ctx.footer, ctx.chromeOnFirst, ctx.title, ctx.date, ctx.margins, pageCount, layout.pageFormat]),
+  };
+}
+
+/** Same break points and same chrome inputs -> redrawing the widgets would
+ *  change nothing on screen; the ~200ms re-render (223-page doc) is skipped. */
+function sameOutcome(a: PageBreakState, b: PageBreakState): boolean {
+  if (a.chromeKey !== b.chromeKey || a.points.length !== b.points.length) return false;
+  for (let i = 0; i < a.points.length; i++) {
+    if (a.points[i].offset !== b.points[i].offset || a.points[i].pageNumber !== b.points[i].pageNumber) return false;
+  }
+  return true;
 }
 
 /**
@@ -516,11 +543,19 @@ export const PageBreaks = Extension.create({
       new Plugin<PageBreakState>({
         key,
         state: {
-          init: () => ({ decorations: DecorationSet.empty, pageCount: 1 }),
+          init: () => ({ decorations: DecorationSet.empty, pageCount: 1, points: [], chromeKey: "" }),
           apply(tr, old) {
             const meta = tr.getMeta(key) as PageBreakState | undefined;
             if (meta) return meta;
-            return tr.docChanged ? { ...old, decorations: old.decorations.map(tr.mapping, tr.doc) } : old;
+            if (!tr.docChanged) return old;
+            // Points map through the transaction like the decorations do, so
+            // the skip-if-unchanged comparison stays fair after edits that
+            // shift content without moving any break (the common case).
+            return {
+              ...old,
+              decorations: old.decorations.map(tr.mapping, tr.doc),
+              points: old.points.map((p) => ({ offset: tr.mapping.map(p.offset, -1), pageNumber: p.pageNumber })),
+            };
           },
         },
         props: {
@@ -530,8 +565,15 @@ export const PageBreaks = Extension.create({
         },
         view(editorView) {
           let timer = 0;
+          // Adaptive debounce: the remeasure re-runs at most ~every 1.5x its
+          // own last cost (capped), so a small document updates near-
+          // instantly while a 200-page one (measured ~155ms/cycle) settles at
+          // a few refreshes per second instead of one per keystroke — typing
+          // latency stays at the transaction cost, not transaction + measure.
+          let lastCostMs = 0;
           const schedule = () => {
             if (timer) return;
+            const delay = Math.min(400, Math.round(lastCostMs * 1.5));
             // setTimeout, not requestAnimationFrame: rAF is suspended by the
             // browser while the window is minimized/occluded/backgrounded,
             // which would leave page breaks stale until the next focus.
@@ -541,9 +583,15 @@ export const PageBreaks = Extension.create({
             // exactly-once-per-frame batching for reliability.
             timer = window.setTimeout(() => {
               timer = 0;
+              const t0 = performance.now();
               const next = buildPageBreakState(editorView);
+              lastCostMs = performance.now() - t0;
+              const cur = key.getState(editorView.state);
+              // Same breaks, same chrome -> nothing on screen would change;
+              // skip the dispatch and the widget re-render it would cause.
+              if (cur && sameOutcome(cur, next)) return;
               editorView.dispatch(editorView.state.tr.setMeta(key, next));
-            }, 0);
+            }, delay);
           };
           scheduleByView.set(editorView, schedule);
           // Catches window resizes, zoom (a CSS property on an ancestor,
