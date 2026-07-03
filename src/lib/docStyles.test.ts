@@ -30,4 +30,30 @@ describe("docStylesCss", () => {
     const print = docStylesCss(".print-content", styles);
     expect(print).toBe(editor.split(".ProseMirror").join(".print-content"));
   });
+
+  it("gerados: fonte cascateia no bloco inteiro, estilo completo só nos títulos", () => {
+    const css = docStylesCss(".p", {
+      generated: { fontFamily: "Times New Roman", fontSizePx: 16, lineHeight: 1.5, align: "center" },
+    });
+    // Bloco inteiro (entradas do sumário, referências) recebe só a fonte.
+    expect(css).toContain(
+      ".p .toc-block, .p nav.toc, .p .bibliography-block, .p section.bibliography " +
+        "{ font-family: Times New Roman; font-size: 16px; line-height: 1.5; }"
+    );
+    // Títulos (editor E print, mesma classe nos dois lados) levam tudo,
+    // inclusive o alinhamento — e com pai qualificado, para vencer as regras
+    // base de 1.1em/1.4em independentemente da ordem das folhas.
+    expect(css).toContain(".p .toc-block .toc-header");
+    expect(css).toContain(".p nav.toc .toc-header");
+    expect(css).toContain(".p .bibliography-block .bibliography-header");
+    expect(css).toContain(".p section.bibliography .bibliography-header");
+    expect(css).toContain("text-align: center;");
+  });
+
+  it("gerados: mesmo CSS para editor e print (contrato da convergência)", () => {
+    const styles = { generated: { fontFamily: "Serif", fontSizePx: 16 } };
+    const editor = docStylesCss(".ProseMirror", styles);
+    const print = docStylesCss(".print-content", styles);
+    expect(print).toBe(editor.split(".ProseMirror").join(".print-content"));
+  });
 });

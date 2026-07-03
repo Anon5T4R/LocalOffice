@@ -129,6 +129,14 @@ describe("preparePrintHtml", () => {
     expect(a.querySelector(".toc-page")).toBeNull();
   });
 
+  it("bibliografia assada leva a classe de título do editor (alvo do estilo 'generated')", async () => {
+    const html = '<div data-bibliography=""></div>';
+    const doc = parse(await preparePrintHtml(html, { numberHeadings: false }));
+    const h = doc.querySelector("section.bibliography h2");
+    expect(h?.className).toBe("bibliography-header");
+    expect(h?.textContent).toBe("Referências");
+  });
+
   it("citações sem engine carregada viram texto pandoc cru", async () => {
     const html = '<p>ver <span data-citation="" data-keys="silva2020"></span></p>';
     const doc = parse(await preparePrintHtml(html, { numberHeadings: false }));

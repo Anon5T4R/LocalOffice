@@ -1,5 +1,6 @@
 import { Editor } from "@tiptap/core";
 import { ptToPx } from "./fontUnits";
+import type { DocStyles } from "./docStyles";
 import { HeaderFooterSpec, PageFormat, PageMargins } from "./settings";
 
 /** Norm sizes are given in points; every internal metric is px (fontUnits). */
@@ -25,6 +26,10 @@ export interface DocTemplate {
   /** Number DISPLAYED on that first chrome page (ABNT: 3 — a capa não conta
    *  na numeração). Undefined = the physical page number. */
   numberStart?: number;
+  /** Named doc styles seeded with the template (lib/docStyles.ts) — the only
+   *  channel that fonts GENERATED text (Sumário/Referências), which the
+   *  content marks below can't reach. Merged over the doc's current styles. */
+  styles?: DocStyles;
   /** Starter document (cover page etc.), inserted only when the doc is empty. */
   content?: () => string;
 }
@@ -89,6 +94,9 @@ export const TEMPLATES: Record<string, DocTemplate> = {
     // folha de rosto (2), sumário (3), Introdução (4, exibida como "3").
     chromeFrom: 4,
     numberStart: 3,
+    // NBR 14724/6027: títulos sem indicativo numérico (Sumário, Referências)
+    // centralizados, mesma fonte e corpo do texto.
+    styles: { generated: { fontFamily: "Times New Roman", fontSizePx: ptToPx(12), lineHeight: 1.5, align: "center" } },
     content: abntContent,
   },
   apa: {
@@ -103,6 +111,8 @@ export const TEMPLATES: Record<string, DocTemplate> = {
     header: { left: "{title}", center: "", right: "{page}" },
     footer: { left: "", center: "", right: "" },
     chromeOnFirst: true,
+    // APA 7: "References" centrado, mesma fonte do texto, espaço duplo.
+    styles: { generated: { fontFamily: "Times New Roman", fontSizePx: ptToPx(12), lineHeight: 2, align: "center" } },
   },
   artigo: {
     name: "Artigo científico",
@@ -118,6 +128,7 @@ export const TEMPLATES: Record<string, DocTemplate> = {
     header: { left: "", center: "", right: "" },
     footer: { left: "", center: "{page}", right: "" },
     chromeOnFirst: true,
+    styles: { generated: { fontFamily: "Times New Roman", fontSizePx: ptToPx(12), lineHeight: 1.5 } },
   },
   relatorio: {
     name: "Relatório técnico",
@@ -131,6 +142,7 @@ export const TEMPLATES: Record<string, DocTemplate> = {
     header: { left: "{title}", center: "", right: "" },
     footer: { left: "", center: "", right: "{page} de {pages}" },
     chromeOnFirst: true,
+    styles: { generated: { fontFamily: "Arial", fontSizePx: ptToPx(11), lineHeight: 1.15 } },
   },
   carta: {
     name: "Carta comercial",
@@ -144,6 +156,7 @@ export const TEMPLATES: Record<string, DocTemplate> = {
     header: { left: "", center: "", right: "" },
     footer: { left: "", center: "", right: "" },
     chromeOnFirst: true,
+    styles: { generated: { fontFamily: "Times New Roman", fontSizePx: ptToPx(12), lineHeight: 1.15 } },
   },
 };
 
