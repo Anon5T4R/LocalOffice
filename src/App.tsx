@@ -30,6 +30,7 @@ import { EditorProvider } from "./state/EditorContext";
 import { PAGE_SIZES } from "./lib/pageGeometry";
 import { effectiveLayoutFor, patchDocLayout, type DocLayout } from "./editor/DocLayout";
 import { recomputePageChrome } from "./editor/PageBreaks";
+import { docStylesCss } from "./lib/docStyles";
 import "./editor/contentStyles";
 import "./App.css";
 
@@ -156,6 +157,20 @@ function App() {
     editor?.commands.setHeadingNumbers(docLayout.numberHeadings);
   }, [editor, docLayout.numberHeadings]);
 
+  // Per-document named styles: applied as a runtime stylesheet AFTER the
+  // shared content typography (editor/contentStyles.ts), so overrides win.
+  // The print pipeline emits the same overrides from the same source
+  // (pdf.ts), keeping page breaks and the PDF convergent under custom styles.
+  useEffect(() => {
+    let tag = document.getElementById("doc-styles") as HTMLStyleElement | null;
+    if (!tag) {
+      tag = document.createElement("style");
+      tag.id = "doc-styles";
+      document.head.appendChild(tag);
+    }
+    tag.textContent = docStylesCss(".ProseMirror", docLayout.styles);
+  }, [docLayout.styles]);
+
   // Same for tracked-changes recording.
   useEffect(() => {
     editor?.commands.setTrackChanges(settings.trackChanges === true);
@@ -258,7 +273,14 @@ function App() {
   const pageStyle = useMemo(() => {
     const style: Record<string, string> = {};
     if (pageFormat !== "classic") {
+      // FIXED sheet width — never shrink to the window (maxWidth included:
+      // .page's stylesheet max-width would otherwise win in narrow windows,
+      // reflowing text into more lines than the true page width and breaking
+      // the editor↔PDF pagination convergence; a small window horizontally
+      // scrolls instead, like Word at 100% zoom).
       style.width = dims.widthCss;
+      style.maxWidth = dims.widthCss;
+      style.flexShrink = "0";
       // Paginated mode: the vertical margins are provided by the PageBreaks
       // chrome decorations (leading/trailing white bands that also hold the
       // header/footer), so `.page` only pads horizontally here — otherwise

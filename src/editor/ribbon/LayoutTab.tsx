@@ -1,9 +1,11 @@
+import { useState } from "react";
 import { useEditorState } from "@tiptap/react";
 import { useEditorInstance } from "../../state/EditorContext";
 import { useSettings } from "../../state/SettingsContext";
 import type { PageFormat } from "../../lib/settings";
 import { TEMPLATES, type DocTemplate } from "../../lib/templates";
 import { effectiveLayout, patchDocLayout } from "../DocLayout";
+import { StylesModal } from "../StylesModal";
 import { Btn } from "./Btn";
 import { MARGIN_PRESETS, currentMarginPreset } from "./shared";
 
@@ -11,7 +13,8 @@ import { MARGIN_PRESETS, currentMarginPreset } from "./shared";
 export function LayoutTab({ onApplyTemplate }: { onApplyTemplate: (tmpl: DocTemplate) => void }) {
   const editor = useEditorInstance();
   const { settings } = useSettings();
-  const { pageFormat, pageMargins, numberHeadings } = effectiveLayout(editor.state.doc, settings);
+  const [showStyles, setShowStyles] = useState(false);
+  const { pageFormat, pageMargins, numberHeadings, styles } = effectiveLayout(editor.state.doc, settings);
 
   const s = useEditorState({
     editor,
@@ -153,6 +156,19 @@ export function LayoutTab({ onApplyTemplate }: { onApplyTemplate: (tmpl: DocTemp
           1.2.3 Títulos
         </Btn>
       </div>
+      <div className="tb-sep" />
+
+      <div className="tb-group">
+        <Btn
+          onClick={() => setShowStyles(true)}
+          active={!!styles && Object.keys(styles).length > 0}
+          title="Estilos do documento (fonte, tamanho, entrelinha, alinhamento por tipo de bloco)"
+          wide
+        >
+          ¶A Estilos
+        </Btn>
+      </div>
+      {showStyles && <StylesModal onClose={() => setShowStyles(false)} />}
     </div>
   );
 }

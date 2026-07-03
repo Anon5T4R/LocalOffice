@@ -106,23 +106,52 @@ export function computeBreakPoints(blocks: MeasuredBlock[], printable: number): 
       // break at a wrong position (e.g. the block boundary, after earlier
       // lines were already counted on the previous page) — the whole block
       // falls back to atomic below instead.
+      //
+      // Widow/orphan control (2/2, same contract the print engine applies —
+      // see contentTypographyCss): a break never leaves a single line of the
+      // paragraph alone at the bottom of a page (orphan → the paragraph
+      // moves whole) nor a single final line alone on the next page (widow →
+      // one more line moves with it). Without this the editor's greedy fill
+      // and paged.js's fragmentation drift by one page as soon as a
+      // paragraph's last line would land alone.
       const info = block.splitLines();
+      const total = info.lineHeights.length;
+      const lineSum = (from: number, to: number) => {
+        let s = 0;
+        for (let k = from; k < to; k++) s += info.lineHeights[k];
+        return s;
+      };
       const pending: PageBreakPoint[] = [];
+      const usedAtBlockStart = used;
+      let lastBreak = 0; // line index where the current page's chunk started
       let u = used;
       let pn = pageNumber;
       let force = forceBreakBefore;
       let ok = true;
-      for (let i = 0; i < info.lineHeights.length; i++) {
+      for (let i = 0; i < total; i++) {
         const h = info.lineHeights[i];
         if (force || (u > 0 && u + h > printable)) {
-          const pos = i === 0 ? block.offset : info.posOfLine(i);
+          let bi = i;
+          // Widow: the remainder is a single line that fits — pull one more.
+          if (total - bi === 1 && lineSum(bi, total) <= printable && bi - 1 > lastBreak) {
+            bi -= 1;
+          }
+          // Orphan: the paragraph's first chunk would be a single line at
+          // the bottom — push the whole block instead (only meaningful when
+          // the paragraph didn't already start its page).
+          if (lastBreak === 0 && pending.length === 0 && bi === 1 && usedAtBlockStart > 0) {
+            bi = 0;
+          }
+          const pos = bi === 0 ? block.offset : info.posOfLine(bi);
           if (pos === null) {
             ok = false;
             break;
           }
           pn++;
           pending.push({ offset: pos, pageNumber: pn });
-          u = 0;
+          lastBreak = bi;
+          // Lines bi..i moved to the fresh page along with the current one.
+          u = lineSum(bi, i);
         }
         force = false;
         u += h;
@@ -298,18 +327,29 @@ function paragraphLines(dom: HTMLElement): LineRect[] {
  * what keeps a large document's remeasure fast (the profile without this was
  * ~2s on a 44-page doc; almost all of it was posAtCoords on every line).
  */
-function measureSplit(view: EditorView, dom: HTMLElement, offset: number, blockHeight: number, zoomFactor: number): SplitInfo {
+function measureSplit(
+  view: EditorView,
+  dom: HTMLElement,
+  offset: number,
+  outerHeight: number,
+  boxHeight: number,
+  zoomFactor: number
+): SplitInfo {
   const lines = paragraphLines(dom);
-  if (lines.length <= 1) return { lineHeights: [blockHeight], posOfLine: () => offset };
+  if (lines.length <= 1) return { lineHeights: [outerHeight], posOfLine: () => offset };
   const box = dom.getBoundingClientRect();
   const lineHeights: number[] = [];
   for (let i = 0; i < lines.length; i++) {
     // Height as the gap to the next line's top (last line runs to the block
-    // bottom) so the line heights sum to the block height, keeping pagination
+    // bottom) so the line heights sum to the box height, keeping pagination
     // consistent with the cheap block-level pass.
     const nextTop = i + 1 < lines.length ? lines[i + 1].top : box.bottom;
     lineHeights.push((nextTop - lines[i].top) / zoomFactor);
   }
+  // The block-level pass counts the block's OUTER height (margins included);
+  // attribute the difference to the first line so the line units sum to the
+  // same total and the two passes can never disagree about page fill.
+  lineHeights[0] += outerHeight - boxHeight;
   return {
     lineHeights,
     posOfLine: (i) => {
@@ -355,23 +395,40 @@ function buildPageBreakState(view: EditorView): PageBreakState {
   });
   let points: PageBreakPoint[];
   try {
-    // Cheap pass: one getBoundingClientRect per block. The line-level split
-    // measurement is attached as a lazy `splitLines` closure that
-    // computeBreakPoints invokes only when the block straddles a boundary.
-    const blocks: MeasuredBlock[] = [];
+    // Cheap pass: one getBoundingClientRect per block. A block's page-fill
+    // height is the DELTA to the next block's top (not its own box height,
+    // which excludes vertical margins — the `> * + *` gap and heading
+    // margins are real page fill; leaving them out under-counted ~12px per
+    // block and let the editor cram in more blocks per page than the PDF).
+    // The delta also gets margin collapsing right for free. The last block
+    // falls back to its box height (nothing below to measure against).
+    const entries: { node: (typeof doc)["firstChild"] & object; offset: number; dom: HTMLElement | null; top: number; boxHeight: number }[] = [];
     doc.forEach((node, offset) => {
       const dom = view.nodeDOM(offset) as HTMLElement | null;
-      const isManualBreak = node.type.name === "pageBreak";
       if (!dom || dom.nodeType !== 1) {
-        blocks.push({ offset, height: 0, isManualBreak });
+        entries.push({ node, offset, dom: null, top: 0, boxHeight: 0 });
         return;
       }
-      const height = dom.getBoundingClientRect().height / zoomFactor;
+      const box = dom.getBoundingClientRect();
+      entries.push({ node, offset, dom, top: box.top, boxHeight: box.height });
+    });
+
+    const blocks: MeasuredBlock[] = entries.map((e, i) => {
+      const isManualBreak = e.node.type.name === "pageBreak";
+      if (!e.dom) return { offset: e.offset, height: 0, isManualBreak };
+      const next = entries[i + 1];
+      const outerHeight =
+        next && next.dom ? (next.top - e.top) / zoomFactor : e.boxHeight / zoomFactor;
+      const dom = e.dom;
+      const offset = e.offset;
+      const boxHeight = e.boxHeight / zoomFactor;
       // Only plain paragraphs split by line; everything else stays atomic
       // (headings avoid orphan fragments; images/tables/lists can't split yet).
       const splitLines =
-        node.type.name === "paragraph" ? () => measureSplit(view, dom, offset, height, zoomFactor) : undefined;
-      blocks.push({ offset, height, isManualBreak, splitLines });
+        e.node.type.name === "paragraph"
+          ? () => measureSplit(view, dom, offset, outerHeight, boxHeight, zoomFactor)
+          : undefined;
+      return { offset: e.offset, height: outerHeight, isManualBreak, splitLines };
     });
     points = computeBreakPoints(blocks, printable);
   } finally {
