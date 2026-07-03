@@ -166,6 +166,24 @@ const turndown = new TurndownService({
     if (el.nodeName === "DIV" && el.hasAttribute?.("data-bibliography")) {
       return '\n\n<div data-bibliography=""></div>\n\n';
     }
+    // A paragraph whose only content is raw-OOXML markers (exportPrep's page
+    // break) is "blank" to turndown — textContent is empty — so it lands
+    // here, never in the ooxmlRaw rule. Emit the raw inlines as their own
+    // markdown paragraph: pandoc wraps them in a single <w:p>.
+    if (el.nodeName === "P" && el.querySelector?.("span[data-ooxml]")) {
+      const parts = Array.from(el.querySelectorAll("span[data-ooxml]")).map((s) =>
+        ooxmlRawReplacement(s as HTMLElement)
+      );
+      return `\n\n${parts.join("")}\n\n`;
+    }
+    // Empty paragraphs are the user's blank lines (Enters espaçando o
+    // texto); markdown has no syntax for them, so emit an NBSP entity —
+    // pandoc and marked read it back as a one-line paragraph instead of
+    // dropping the line. NBSP-filled paragraphs (exportPrep) land here too:
+    // NBSP matches \s, so turndown classifies them as blank.
+    if (el.nodeName === "P") {
+      return "\n\n&nbsp;\n\n";
+    }
     return (node as { isBlock?: boolean }).isBlock ? "\n\n" : "";
   },
 });
@@ -394,7 +412,11 @@ export function stripFootnoteBackrefs(html: string): string {
 }
 
 export async function markdownToHtml(md: string): Promise<string> {
-  return stripFootnoteBackrefs((await marked.parse(md)) as string);
+  const html = stripFootnoteBackrefs((await marked.parse(md)) as string);
+  // NBSP-only paragraphs are the serialized form of the user's blank lines
+  // (see blankReplacement) — restore them to truly empty paragraphs so the
+  // editor treats them exactly like a fresh Enter.
+  return html.replace(/<p>(?:&nbsp;|\u00a0)<\/p>/g, "<p></p>");
 }
 
 export function htmlToMarkdown(html: string): string {
