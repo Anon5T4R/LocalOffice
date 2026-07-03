@@ -111,7 +111,11 @@ export const TEMPLATES: Record<string, DocTemplate> = {
     fontSize: pt(12),
     lineHeight: "1.5",
     textAlign: "justify",
+    // Chrome sempre completo e explícito: aplicar um modelo não pode herdar
+    // cabeçalho/rodapé do anterior (o layout do doc sobrevive à troca).
+    header: { left: "", center: "", right: "" },
     footer: { left: "", center: "{page}", right: "" },
+    chromeOnFirst: true,
   },
   relatorio: {
     name: "Relatório técnico",
@@ -124,6 +128,7 @@ export const TEMPLATES: Record<string, DocTemplate> = {
     textAlign: "left",
     header: { left: "{title}", center: "", right: "" },
     footer: { left: "", center: "", right: "{page} de {pages}" },
+    chromeOnFirst: true,
   },
   carta: {
     name: "Carta comercial",
@@ -134,6 +139,9 @@ export const TEMPLATES: Record<string, DocTemplate> = {
     fontSize: pt(12),
     lineHeight: "1.15",
     textAlign: "left",
+    header: { left: "", center: "", right: "" },
+    footer: { left: "", center: "", right: "" },
+    chromeOnFirst: true,
   },
 };
 
