@@ -240,6 +240,9 @@ body {
 .editor-scroll {
   flex: 1;
   overflow-y: auto;
+  /* Paginated sheets have a FIXED width (true page size, for WYSIWYG);
+     windows narrower than the sheet scroll horizontally, like Word. */
+  overflow-x: auto;
   padding: 28px 16px 80px;
   position: relative;
 }
@@ -1802,6 +1805,64 @@ body {
   background: var(--bg);
   color: var(--text);
   font-size: 13px;
+}
+
+/* Styles modal (per-document named styles) */
+.styles-hint {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 0;
+}
+
+.styles-grid {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 13px;
+}
+
+.styles-grid th,
+.styles-grid td {
+  border: 1px solid var(--border);
+  padding: 5px 7px;
+  text-align: left;
+}
+
+.styles-grid th {
+  background: var(--bg);
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.styles-grid input,
+.styles-grid select {
+  width: 100%;
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 13px;
+  box-sizing: border-box;
+}
+
+.styles-grid input[type="number"] {
+  max-width: 72px;
+}
+
+.styles-na {
+  color: var(--muted);
+}
+
+.styles-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.tb-primary {
+  background: var(--accent) !important;
+  color: #fff !important;
+  border-color: var(--accent) !important;
 }
 
 .modal-row {

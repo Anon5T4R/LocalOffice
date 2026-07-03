@@ -2,6 +2,7 @@ import { advanceHeadingCounter, newHeadingCounters } from "../editor/HeadingNumb
 import { bakeCitationsInto } from "./citationStore";
 import { bakeCaptionsInto, type CaptionEntry } from "./captionNumbers";
 import { contentTypographyCss } from "./contentTypography";
+import { docStylesCss, type DocStyles } from "./docStyles";
 import { PAGE_SIZES } from "./pageGeometry";
 import { HeaderFooterSpec, PageFormat, PageMargins } from "./settings";
 
@@ -33,6 +34,9 @@ export interface PrintOptions {
   chromeOnFirst: boolean;
   /** Bake automatic heading numbers (1, 1.1…) into the printed text. */
   numberHeadings: boolean;
+  /** Named per-document styles — MUST mirror what the editor rendered with,
+   *  or the PDF paginates differently from the on-screen pages. */
+  styles?: DocStyles | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -259,6 +263,7 @@ function buildPrintCss(opts: PrintOptions): string {
        paginating exactly like the on-screen page preview. Below it: the
        print-only side (fixed black-on-white colors, break rules). */
     ${contentTypographyCss(".print-content")}
+    ${docStylesCss(".print-content", opts.styles)}
     .print-content { color: #000; }
     .print-content blockquote { border-left: 3px solid #999; }
     .print-content th, .print-content td { border-color: #999; }

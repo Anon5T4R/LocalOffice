@@ -2,6 +2,7 @@ import { Extension } from "@tiptap/core";
 import type { Node as PMNode } from "@tiptap/pm/model";
 import type { Editor } from "@tiptap/react";
 import { EMPTY_HEADER_FOOTER, type HeaderFooterSpec, type PageFormat, type PageMargins, type Settings } from "../lib/settings";
+import type { DocStyles } from "../lib/docStyles";
 import { DEFAULT_MARGINS } from "../lib/pageGeometry";
 
 /**
@@ -19,6 +20,9 @@ export interface DocLayout {
   pageFooter: HeaderFooterSpec;
   pageChromeOnFirst: boolean;
   numberHeadings: boolean;
+  /** Named per-document styles (lib/docStyles.ts); null = app defaults.
+   *  Optional so layouts saved before this field existed keep parsing. */
+  styles?: DocStyles | null;
 }
 
 declare module "@tiptap/core" {
@@ -45,6 +49,7 @@ export function settingsLayout(settings: Settings): DocLayout {
     pageFooter: settings.pageFooter || { ...EMPTY_HEADER_FOOTER, center: "{page}" },
     pageChromeOnFirst: settings.pageChromeOnFirst !== false,
     numberHeadings: settings.numberHeadings === true,
+    styles: null,
   };
 }
 

@@ -304,6 +304,87 @@ export function mathFromPandoc(html: string): string {
   return doc.body.innerHTML;
 }
 
+// "Figura 1 — ", "Tabela 12 – " etc. at the start of a paragraph: the shape
+// this app's own DOCX export produces AND what a Word SEQ caption looks like
+// once its field is flattened to text by the import.
+const CAPTION_LABEL_RE = /^\s*(Figura|Tabela)\s+\d+\s*[—–-]\s*/;
+
+/**
+ * Recover live document structure from a Word/ODT import: pandoc flattens
+ * SEQ caption fields into plain "Figura 1 — …" paragraphs, REF
+ * cross-references into static `<a href="#bookmark">` links, and bookmark
+ * targets into empty `<span class="anchor">` markers. This turns them back
+ * into this app's caption nodes (numbering recomputed live), `data-ref-id`
+ * targets and crossref nodes — so an academic document round-trips as
+ * structure, not as frozen text.
+ *
+ * Conservative on purpose: a paragraph only becomes a caption when it has a
+ * bookmark anchor (a REF pointed at it — strongest signal) or matches the
+ * exact dash-separated label shape; a link only becomes a crossref when its
+ * target is an anchor recovered in the same pass (footnote/TOC links keep
+ * working as links).
+ */
+export function fieldsFromPandoc(html: string): string {
+  // Two independent signals, either enters the pass: bookmark anchors (REF
+  // targets) and caption-shaped labels (a caption never referenced has no
+  // bookmark, but must still round-trip as a caption node).
+  if (!html.includes('class="anchor"') && !/(Figura|Tabela)\s+\d/.test(html)) return html;
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  const refIds = new Set<string>();
+
+  // Caption paragraphs -> <p data-caption> nodes. The frozen "Figura N — "
+  // prefix is stripped: the caption node renumbers itself in document order
+  // (same number when the order didn't change).
+  doc.querySelectorAll("p").forEach((p) => {
+    const anchor = p.querySelector(":scope > span.anchor[id]");
+    const text = (p.textContent ?? "").trim();
+    const m = CAPTION_LABEL_RE.exec(text);
+    if (!m) return;
+    if (anchor) {
+      p.setAttribute("data-ref-id", anchor.id);
+      refIds.add(anchor.id);
+      anchor.remove();
+    }
+    p.setAttribute("data-caption", m[1] === "Tabela" ? "table" : "figure");
+    // The label is plain leading text; consume it across however many text
+    // nodes it spans (marks never start before the caption body).
+    let remaining = m[0].trimStart().length;
+    while (remaining > 0 && p.firstChild) {
+      const first = p.firstChild;
+      if (first.nodeType !== Node.TEXT_NODE) break;
+      const len = first.textContent?.length ?? 0;
+      if (len <= remaining) {
+        remaining -= len;
+        first.remove();
+      } else {
+        first.textContent = (first.textContent ?? "").slice(remaining);
+        remaining = 0;
+      }
+    }
+  });
+
+  // Headings that were REF targets carry an anchor span; move it into the
+  // heading's persistent refId.
+  doc.querySelectorAll("h1, h2, h3, h4, h5, h6").forEach((h) => {
+    const anchor = h.querySelector("span.anchor[id]");
+    if (!anchor) return;
+    h.setAttribute("data-ref-id", anchor.id);
+    refIds.add(anchor.id);
+    anchor.remove();
+  });
+
+  // Internal links whose target we just recovered -> live crossref nodes.
+  doc.querySelectorAll('a[href^="#"]').forEach((a) => {
+    const id = decodeURIComponent((a.getAttribute("href") ?? "").slice(1));
+    if (!refIds.has(id)) return;
+    const span = doc.createElement("span");
+    span.setAttribute("data-crossref", id);
+    a.replaceWith(span);
+  });
+
+  return doc.body.innerHTML;
+}
+
 /** Drop the "↩" backlinks pandoc / marked-footnote add inside note bodies. */
 export function stripFootnoteBackrefs(html: string): string {
   return html.replace(

@@ -15,6 +15,16 @@ interface PageBreakState {
    *  fixed page height, so this plugin has no opinion -- StatusBar keeps its
    *  own scrollHeight-based estimate for that format). */
   pageCount: number;
+  /** The break points the decorations were built from, position-mapped
+   *  through every transaction — a remeasure that lands on the SAME points
+   *  skips the dispatch entirely, so the (expensive) widget re-render only
+   *  happens when a break actually moved. Measured on a 223-page document:
+   *  ~200ms per redraw, with ~2s spikes from re-laying-out 222 widgets. */
+  points: PageBreakPoint[];
+  /** Fingerprint of everything besides content that shapes the chrome
+   *  (margins, header/footer templates, title, page count…) — a change here
+   *  forces a redraw even when no break moved. */
+  chromeKey: string;
 }
 
 const key = new PluginKey<PageBreakState>("pageBreaks");
@@ -106,23 +116,52 @@ export function computeBreakPoints(blocks: MeasuredBlock[], printable: number): 
       // break at a wrong position (e.g. the block boundary, after earlier
       // lines were already counted on the previous page) — the whole block
       // falls back to atomic below instead.
+      //
+      // Widow/orphan control (2/2, same contract the print engine applies —
+      // see contentTypographyCss): a break never leaves a single line of the
+      // paragraph alone at the bottom of a page (orphan → the paragraph
+      // moves whole) nor a single final line alone on the next page (widow →
+      // one more line moves with it). Without this the editor's greedy fill
+      // and paged.js's fragmentation drift by one page as soon as a
+      // paragraph's last line would land alone.
       const info = block.splitLines();
+      const total = info.lineHeights.length;
+      const lineSum = (from: number, to: number) => {
+        let s = 0;
+        for (let k = from; k < to; k++) s += info.lineHeights[k];
+        return s;
+      };
       const pending: PageBreakPoint[] = [];
+      const usedAtBlockStart = used;
+      let lastBreak = 0; // line index where the current page's chunk started
       let u = used;
       let pn = pageNumber;
       let force = forceBreakBefore;
       let ok = true;
-      for (let i = 0; i < info.lineHeights.length; i++) {
+      for (let i = 0; i < total; i++) {
         const h = info.lineHeights[i];
         if (force || (u > 0 && u + h > printable)) {
-          const pos = i === 0 ? block.offset : info.posOfLine(i);
+          let bi = i;
+          // Widow: the remainder is a single line that fits — pull one more.
+          if (total - bi === 1 && lineSum(bi, total) <= printable && bi - 1 > lastBreak) {
+            bi -= 1;
+          }
+          // Orphan: the paragraph's first chunk would be a single line at
+          // the bottom — push the whole block instead (only meaningful when
+          // the paragraph didn't already start its page).
+          if (lastBreak === 0 && pending.length === 0 && bi === 1 && usedAtBlockStart > 0) {
+            bi = 0;
+          }
+          const pos = bi === 0 ? block.offset : info.posOfLine(bi);
           if (pos === null) {
             ok = false;
             break;
           }
           pn++;
           pending.push({ offset: pos, pageNumber: pn });
-          u = 0;
+          lastBreak = bi;
+          // Lines bi..i moved to the fresh page along with the current one.
+          u = lineSum(bi, i);
         }
         force = false;
         u += h;
@@ -298,18 +337,29 @@ function paragraphLines(dom: HTMLElement): LineRect[] {
  * what keeps a large document's remeasure fast (the profile without this was
  * ~2s on a 44-page doc; almost all of it was posAtCoords on every line).
  */
-function measureSplit(view: EditorView, dom: HTMLElement, offset: number, blockHeight: number, zoomFactor: number): SplitInfo {
+function measureSplit(
+  view: EditorView,
+  dom: HTMLElement,
+  offset: number,
+  outerHeight: number,
+  boxHeight: number,
+  zoomFactor: number
+): SplitInfo {
   const lines = paragraphLines(dom);
-  if (lines.length <= 1) return { lineHeights: [blockHeight], posOfLine: () => offset };
+  if (lines.length <= 1) return { lineHeights: [outerHeight], posOfLine: () => offset };
   const box = dom.getBoundingClientRect();
   const lineHeights: number[] = [];
   for (let i = 0; i < lines.length; i++) {
     // Height as the gap to the next line's top (last line runs to the block
-    // bottom) so the line heights sum to the block height, keeping pagination
+    // bottom) so the line heights sum to the box height, keeping pagination
     // consistent with the cheap block-level pass.
     const nextTop = i + 1 < lines.length ? lines[i + 1].top : box.bottom;
     lineHeights.push((nextTop - lines[i].top) / zoomFactor);
   }
+  // The block-level pass counts the block's OUTER height (margins included);
+  // attribute the difference to the first line so the line units sum to the
+  // same total and the two passes can never disagree about page fill.
+  lineHeights[0] += outerHeight - boxHeight;
   return {
     lineHeights,
     posOfLine: (i) => {
@@ -339,7 +389,9 @@ function buildPageBreakState(view: EditorView): PageBreakState {
   const layout = effectiveLayout(doc, settings);
   // "classic" is explicitly free-flow (see pageGeometry.ts) -- no fixed
   // page height, so there are no pages and no chrome.
-  if (layout.pageFormat === "classic") return { decorations: DecorationSet.empty, pageCount: 1 };
+  if (layout.pageFormat === "classic") {
+    return { decorations: DecorationSet.empty, pageCount: 1, points: [], chromeKey: "classic" };
+  }
 
   const printable = printableHeightPx(layout.pageFormat, layout.pageMargins);
   const zoomFactor = (settings.zoom || 100) / 100;
@@ -355,23 +407,81 @@ function buildPageBreakState(view: EditorView): PageBreakState {
   });
   let points: PageBreakPoint[];
   try {
-    // Cheap pass: one getBoundingClientRect per block. The line-level split
-    // measurement is attached as a lazy `splitLines` closure that
-    // computeBreakPoints invokes only when the block straddles a boundary.
-    const blocks: MeasuredBlock[] = [];
+    // Cheap pass: one getBoundingClientRect per block. A block's page-fill
+    // height is the DELTA to the next block's top (not its own box height,
+    // which excludes vertical margins — the `> * + *` gap and heading
+    // margins are real page fill; leaving them out under-counted ~12px per
+    // block and let the editor cram in more blocks per page than the PDF).
+    // The delta also gets margin collapsing right for free. The last block
+    // falls back to its box height (nothing below to measure against).
+    const entries: { node: (typeof doc)["firstChild"] & object; offset: number; dom: HTMLElement | null; top: number; boxHeight: number }[] = [];
     doc.forEach((node, offset) => {
       const dom = view.nodeDOM(offset) as HTMLElement | null;
-      const isManualBreak = node.type.name === "pageBreak";
       if (!dom || dom.nodeType !== 1) {
-        blocks.push({ offset, height: 0, isManualBreak });
+        entries.push({ node, offset, dom: null, top: 0, boxHeight: 0 });
         return;
       }
-      const height = dom.getBoundingClientRect().height / zoomFactor;
+      const box = dom.getBoundingClientRect();
+      entries.push({ node, offset, dom, top: box.top, boxHeight: box.height });
+    });
+
+    // Containers whose direct children become independent break units, so a
+    // page break can fall BETWEEN list items / quoted paragraphs instead of
+    // pushing the whole container (which could overflow a page). Their
+    // children stay atomic (no line-split inside containers), and a child's
+    // own nested content is part of its unit. Tables stay atomic: a break
+    // widget between <tr>s doesn't render meaningfully.
+    const SPLITTABLE_CONTAINERS = new Set(["bulletList", "orderedList", "blockquote"]);
+
+    const blocks: MeasuredBlock[] = [];
+    entries.forEach((e, i) => {
+      const isManualBreak = e.node.type.name === "pageBreak";
+      if (!e.dom) {
+        blocks.push({ offset: e.offset, height: 0, isManualBreak });
+        return;
+      }
+      const next = entries[i + 1];
+      const nextTop = next && next.dom ? next.top : e.top + e.boxHeight;
+      const outerHeight = (nextTop - e.top) / zoomFactor;
+      const dom = e.dom;
+      const offset = e.offset;
+      const boxHeight = e.boxHeight / zoomFactor;
+
+      if (SPLITTABLE_CONTAINERS.has(e.node.type.name) && e.node.childCount > 1) {
+        // Partition the container's page fill among its children: child i
+        // runs to the next child's top; the first also absorbs the leading
+        // edge (container top margin/padding) and the last runs to the next
+        // top-level block (trailing padding + gap below). Sums to exactly
+        // the container's outer height, so pagination totals stay
+        // consistent with the atomic path.
+        const kids: { offset: number; top: number }[] = [];
+        e.node.forEach((_child, rel) => {
+          const abs = offset + 1 + rel;
+          const kdom = view.nodeDOM(abs) as HTMLElement | null;
+          if (kdom && kdom.nodeType === 1) kids.push({ offset: abs, top: kdom.getBoundingClientRect().top });
+        });
+        if (kids.length > 1) {
+          for (let k = 0; k < kids.length; k++) {
+            const start = k === 0 ? e.top : kids[k].top;
+            const end = k + 1 < kids.length ? kids[k + 1].top : nextTop;
+            blocks.push({
+              // Breaking before the first child = breaking before the container.
+              offset: k === 0 ? offset : kids[k].offset,
+              height: (end - start) / zoomFactor,
+              isManualBreak: false,
+            });
+          }
+          return;
+        }
+      }
+
       // Only plain paragraphs split by line; everything else stays atomic
-      // (headings avoid orphan fragments; images/tables/lists can't split yet).
+      // (headings avoid orphan fragments; images/tables can't split yet).
       const splitLines =
-        node.type.name === "paragraph" ? () => measureSplit(view, dom, offset, height, zoomFactor) : undefined;
-      blocks.push({ offset, height, isManualBreak, splitLines });
+        e.node.type.name === "paragraph"
+          ? () => measureSplit(view, dom, offset, outerHeight, boxHeight, zoomFactor)
+          : undefined;
+      blocks.push({ offset, height: outerHeight, isManualBreak, splitLines });
     });
     points = computeBreakPoints(blocks, printable);
   } finally {
@@ -396,7 +506,22 @@ function buildPageBreakState(view: EditorView): PageBreakState {
   points.forEach((p, i) => decorations.push(betweenGap(p.offset, i + 1, i + 2, ctx)));
   decorations.push(trailingBand(doc.content.size, pageCount, ctx));
 
-  return { decorations: DecorationSet.create(doc, decorations), pageCount };
+  return {
+    decorations: DecorationSet.create(doc, decorations),
+    pageCount,
+    points,
+    chromeKey: JSON.stringify([ctx.header, ctx.footer, ctx.chromeOnFirst, ctx.title, ctx.date, ctx.margins, pageCount, layout.pageFormat]),
+  };
+}
+
+/** Same break points and same chrome inputs -> redrawing the widgets would
+ *  change nothing on screen; the ~200ms re-render (223-page doc) is skipped. */
+function sameOutcome(a: PageBreakState, b: PageBreakState): boolean {
+  if (a.chromeKey !== b.chromeKey || a.points.length !== b.points.length) return false;
+  for (let i = 0; i < a.points.length; i++) {
+    if (a.points[i].offset !== b.points[i].offset || a.points[i].pageNumber !== b.points[i].pageNumber) return false;
+  }
+  return true;
 }
 
 /**
@@ -418,11 +543,19 @@ export const PageBreaks = Extension.create({
       new Plugin<PageBreakState>({
         key,
         state: {
-          init: () => ({ decorations: DecorationSet.empty, pageCount: 1 }),
+          init: () => ({ decorations: DecorationSet.empty, pageCount: 1, points: [], chromeKey: "" }),
           apply(tr, old) {
             const meta = tr.getMeta(key) as PageBreakState | undefined;
             if (meta) return meta;
-            return tr.docChanged ? { ...old, decorations: old.decorations.map(tr.mapping, tr.doc) } : old;
+            if (!tr.docChanged) return old;
+            // Points map through the transaction like the decorations do, so
+            // the skip-if-unchanged comparison stays fair after edits that
+            // shift content without moving any break (the common case).
+            return {
+              ...old,
+              decorations: old.decorations.map(tr.mapping, tr.doc),
+              points: old.points.map((p) => ({ offset: tr.mapping.map(p.offset, -1), pageNumber: p.pageNumber })),
+            };
           },
         },
         props: {
@@ -432,8 +565,15 @@ export const PageBreaks = Extension.create({
         },
         view(editorView) {
           let timer = 0;
+          // Adaptive debounce: the remeasure re-runs at most ~every 1.5x its
+          // own last cost (capped), so a small document updates near-
+          // instantly while a 200-page one (measured ~155ms/cycle) settles at
+          // a few refreshes per second instead of one per keystroke — typing
+          // latency stays at the transaction cost, not transaction + measure.
+          let lastCostMs = 0;
           const schedule = () => {
             if (timer) return;
+            const delay = Math.min(400, Math.round(lastCostMs * 1.5));
             // setTimeout, not requestAnimationFrame: rAF is suspended by the
             // browser while the window is minimized/occluded/backgrounded,
             // which would leave page breaks stale until the next focus.
@@ -443,9 +583,15 @@ export const PageBreaks = Extension.create({
             // exactly-once-per-frame batching for reliability.
             timer = window.setTimeout(() => {
               timer = 0;
+              const t0 = performance.now();
               const next = buildPageBreakState(editorView);
+              lastCostMs = performance.now() - t0;
+              const cur = key.getState(editorView.state);
+              // Same breaks, same chrome -> nothing on screen would change;
+              // skip the dispatch and the widget re-render it would cause.
+              if (cur && sameOutcome(cur, next)) return;
               editorView.dispatch(editorView.state.tr.setMeta(key, next));
-            }, 0);
+            }, delay);
           };
           scheduleByView.set(editorView, schedule);
           // Catches window resizes, zoom (a CSS property on an ancestor,

@@ -78,23 +78,59 @@ describe("computeBreakPoints", () => {
       }),
     };
     const points = computeBreakPoints([block], 1000);
-    // 400+400 cabe; +400 estoura -> quebra antes da 3ª linha, num offset
-    // interno ao parágrafo (12), não um limite de bloco.
-    expect(points).toEqual([{ offset: 12, pageNumber: 2 }]);
-    // posOfLine chamado só para a linha que virou quebra (índice 2), não para
-    // todas -- é o que torna a remedição barata em doc grande.
-    expect(posCalls).toEqual([2]);
+    // Guloso quebraria antes da 3ª linha (i=2), mas isso deixaria a última
+    // linha sozinha na página seguinte — a regra de VIÚVA (2/2) puxa uma
+    // linha junto: quebra antes da 2ª (offset 11).
+    expect(points).toEqual([{ offset: 11, pageNumber: 2 }]);
+    // posOfLine chamado só para a linha da quebra final, não para todas --
+    // é o que torna a remedição barata em doc grande.
+    expect(posCalls).toEqual([1]);
+  });
+
+  it("M2: órfã (1ª linha sozinha no pé da página) empurra o parágrafo inteiro", () => {
+    const filler = { offset: 0, height: 600, isManualBreak: false };
+    const para = {
+      offset: 10,
+      height: 1200, // 600+1200 estoura
+      isManualBreak: false,
+      splitLines: () => ({
+        // linha 0 caberia na sobra (600+400=1000), linhas 1..2 não -> quebra
+        // gulosa em i=1 deixaria a linha 0 órfã; regra empurra o bloco todo.
+        lineHeights: [400, 400, 400],
+        posOfLine: (i: number) => [10, 11, 12][i],
+      }),
+    };
+    const points = computeBreakPoints([filler, para], 1000);
+    expect(points[0]).toEqual({ offset: 10, pageNumber: 2 }); // limite do bloco
+  });
+
+  it("M2: parágrafo no TOPO da página não sofre empurrão de órfã (não há pra onde)", () => {
+    const para = {
+      offset: 10,
+      height: 1200,
+      isManualBreak: false,
+      splitLines: () => ({
+        lineHeights: [900, 200, 200], // 1ª linha quase enche a página sozinha
+        posOfLine: (i: number) => [10, 11, 12][i],
+      }),
+    };
+    const points = computeBreakPoints([para], 1000);
+    // quebra na 2ª linha mesmo restando só 1 linha na página 1 — o parágrafo
+    // já começa a página, empurrar o bloco não resolveria nada.
+    expect(points).toEqual([{ offset: 11, pageNumber: 2 }]);
   });
 
   it("M2: hit-test falhando (posOfLine null) cai para bloco atômico, sem quebra em posição errada", () => {
     const filler = { offset: 0, height: 600, isManualBreak: false };
     const para = {
       offset: 10,
-      height: 800, // estoura (600+800 > 1000) -> tenta dividir
+      height: 1600,
       isManualBreak: false,
       splitLines: () => ({
-        lineHeights: [400, 400],
-        posOfLine: (i: number) => (i === 0 ? 10 : null), // linha 2 não resolve
+        lineHeights: [400, 400, 400, 400],
+        // a 1ª quebra (órfã -> limite do bloco) não precisa de posOfLine; a
+        // 2ª (linha 2) precisa e falha -> o bloco inteiro vira atômico.
+        posOfLine: (i: number) => (i === 0 ? 10 : null),
       }),
     };
     const points = computeBreakPoints([filler, para], 1000);

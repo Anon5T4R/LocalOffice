@@ -116,6 +116,7 @@ export function useFileOperations({
         footer: layout.pageFooter,
         chromeOnFirst: layout.pageChromeOnFirst,
         numberHeadings: layout.numberHeadings,
+        styles: layout.styles ?? null,
       },
     });
   }, [editorRef, tabsRef, activeIdRef, settings]);
