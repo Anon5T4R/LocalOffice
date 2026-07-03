@@ -197,6 +197,11 @@ function App() {
         // numeração deslocada do anterior (ex.: ABNT -> APA).
         pageChromeFrom: tmpl.chromeFrom ?? null,
         pageNumberStart: tmpl.numberStart ?? null,
+        // O modelo manda nos estilos que define (a fonte dos blocos gerados,
+        // Sumário/Referências); os demais estilos nomeados do usuário ficam.
+        ...(tmpl.styles && {
+          styles: { ...(effectiveLayoutFor(editor, settings).styles ?? {}), ...tmpl.styles },
+        }),
       });
       // Deferred out of the React event: setContent instantiates NodeViews
       // (TOC, bibliography) through flushSync, which React rejects mid-render.

@@ -32,6 +32,11 @@ export interface DocStyles {
   h3?: BlockStyle;
   blockquote?: BlockStyle;
   caption?: BlockStyle;
+  /** Generated blocks: Sumário/Listas (TOC) e Referências (bibliography).
+   *  Their text is produced by NodeViews (editor) and baking (print), so the
+   *  font marks a template applies to content never reach it — this style is
+   *  the only channel that fonts it, on both sides. */
+  generated?: BlockStyle;
 }
 
 export const STYLE_TARGETS: { key: keyof DocStyles; label: string }[] = [
@@ -41,6 +46,19 @@ export const STYLE_TARGETS: { key: keyof DocStyles; label: string }[] = [
   { key: "h3", label: "Título 3" },
   { key: "blockquote", label: "Citação" },
   { key: "caption", label: "Legenda" },
+  { key: "generated", label: "Sumário/Referências" },
+];
+
+/** Containers of generated text: editor NodeViews / print-baked sections. */
+const GENERATED_BLOCKS = [".toc-block", "nav.toc", ".bibliography-block", "section.bibliography"];
+/** Their titles ("Sumário", "Lista de Figuras/Tabelas", "Referências"),
+ *  parent-qualified so these rules outrank the base 1.1em/1.4em title rules
+ *  (App.css / pdf.ts print CSS) regardless of stylesheet order. */
+const GENERATED_TITLES = [
+  ".toc-block .toc-header",
+  "nav.toc .toc-header",
+  ".bibliography-block .bibliography-header",
+  "section.bibliography .bibliography-header",
 ];
 
 function selectorFor(scope: string, key: keyof DocStyles): string {
@@ -68,6 +86,23 @@ function declarations(s: BlockStyle): string {
   return out.join(" ");
 }
 
+/** The "generated" style needs two grains: the font metrics cascade over the
+ *  whole block (entries included — TOC lines, csl-entry references), while the
+ *  full style (alignment, spacing) hits only the titles, replacing their
+ *  relative base size with the exact value. */
+function generatedCss(scope: string, s: BlockStyle): string {
+  const font: string[] = [];
+  if (s.fontFamily) font.push(`font-family: ${s.fontFamily};`);
+  if (s.fontSizePx) font.push(`font-size: ${s.fontSizePx}px;`);
+  if (s.lineHeight) font.push(`line-height: ${s.lineHeight};`);
+  const rules: string[] = [];
+  if (font.length)
+    rules.push(`${GENERATED_BLOCKS.map((b) => `${scope} ${b}`).join(", ")} { ${font.join(" ")} }`);
+  const decl = declarations(s);
+  if (decl) rules.push(`${GENERATED_TITLES.map((t) => `${scope} ${t}`).join(", ")} { ${decl} }`);
+  return rules.join("\n");
+}
+
 /** CSS for the document's style overrides, or "" when there are none. */
 export function docStylesCss(scope: string, styles: DocStyles | null | undefined): string {
   if (!styles) return "";
@@ -75,6 +110,11 @@ export function docStylesCss(scope: string, styles: DocStyles | null | undefined
   for (const { key } of STYLE_TARGETS) {
     const s = styles[key];
     if (!s) continue;
+    if (key === "generated") {
+      const css = generatedCss(scope, s);
+      if (css) rules.push(css);
+      continue;
+    }
     const decl = declarations(s);
     if (decl) rules.push(`${selectorFor(scope, key)} { ${decl} }`);
   }

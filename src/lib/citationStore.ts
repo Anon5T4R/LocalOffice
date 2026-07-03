@@ -148,6 +148,9 @@ export function bakeCitationsInto(doc: Document): void {
     const wrap = doc.createElement("section");
     wrap.className = "bibliography";
     const h = doc.createElement("h2");
+    // Same class as the editor NodeView's title, so the "generated" doc style
+    // (lib/docStyles.ts) fonts it identically on both sides.
+    h.className = "bibliography-header";
     h.textContent = "Referências";
     wrap.appendChild(h);
     wrap.insertAdjacentHTML("beforeend", entries.join("\n"));

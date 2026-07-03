@@ -680,6 +680,9 @@ body {
   cursor: pointer;
   padding: 2px 4px;
   border-radius: 4px;
+  /* <button> não herda fonte por padrão — sem isto as entradas do sumário
+     ignoram a fonte do documento (estilo "generated" de docStyles). */
+  font-family: inherit;
   font-size: 0.95em;
   white-space: nowrap;
   overflow: hidden;
