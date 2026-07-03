@@ -36,4 +36,14 @@ declare module "pagedjs" {
     /** Event emitter: re-emits the chunker's "page" per rendered page, plus "rendering"/"rendered". */
     on(event: "page" | "rendering" | "rendered", handler: (payload: unknown) => void): void;
   }
+
+  /** Base class for chunker/polisher hooks (filter, afterParsed, …). Loosely
+   *  typed — we only implement `filter` (see pdf.ts registerUndisplayedFix). */
+  export class Handler {
+    constructor(...args: unknown[]);
+    filter?(content: DocumentFragment): void;
+  }
+
+  /** Adds handlers (globally) to every Previewer created afterwards. */
+  export function registerHandlers(...handlers: (typeof Handler)[]): void;
 }

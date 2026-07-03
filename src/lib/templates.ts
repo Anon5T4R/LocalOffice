@@ -36,23 +36,25 @@ function abntContent(): string {
     `<${tag} style="text-align: center">${text}</${tag}>`;
   const gap = (n: number) => "<p></p>".repeat(n);
   return [
-    // Capa
+    // Capa e folha de rosto: os gaps são calibrados para fechar EXATAMENTE
+    // uma página A4 com margens ABNT (medido ao vivo, editor = PDF) — um
+    // parágrafo vazio a mais derrama Cidade/ano para a página seguinte.
     center("NOME DA INSTITUIÇÃO"),
     center("NOME DO AUTOR"),
-    gap(8),
+    gap(7),
     center("<strong>TÍTULO DO TRABALHO: subtítulo</strong>"),
-    gap(10),
+    gap(8),
     center("Cidade"),
     center(String(year)),
     '<div data-page-break="true"></div>',
     // Folha de rosto
     center("NOME DO AUTOR"),
-    gap(8),
+    gap(6),
     center("<strong>TÍTULO DO TRABALHO: subtítulo</strong>"),
-    gap(4),
+    gap(3),
     '<p style="margin-left: 8cm">Trabalho apresentado ao Curso X da Instituição Y como requisito parcial para obtenção do título de Z.</p>',
     '<p style="margin-left: 8cm">Orientador(a): Prof(a). Nome</p>',
-    gap(6),
+    gap(4),
     center("Cidade"),
     center(String(year)),
     '<div data-page-break="true"></div>',
