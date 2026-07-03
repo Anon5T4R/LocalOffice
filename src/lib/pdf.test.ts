@@ -107,6 +107,28 @@ describe("preparePrintHtml", () => {
     expect(doc.querySelector("p:last-of-type")?.textContent).toContain("ref?");
   });
 
+  it("assa números de página do editor no sumário e listas (com deslocamento ABNT)", async () => {
+    const html =
+      '<nav data-toc=""></nav><nav data-toc="figures"></nav>' +
+      '<h1>Intro</h1><p data-caption="figure">gato</p><h2>Métodos</h2>';
+    const doc = parse(
+      await preparePrintHtml(html, { numberHeadings: false, tocPages: [3, 4], captionPages: [3] })
+    );
+    const sum = [...doc.querySelectorAll('nav[data-toc=""] a.toc-entry')];
+    expect(sum.every((a) => a.classList.contains("baked"))).toBe(true);
+    expect(sum.map((a) => a.querySelector(".toc-page")?.textContent)).toEqual(["3", "4"]);
+    const fig = doc.querySelector('nav[data-toc="figures"] a.toc-entry .toc-page');
+    expect(fig?.textContent).toBe("3");
+  });
+
+  it("sem tocPages (formato clássico) o sumário fica no fallback target-counter", async () => {
+    const html = '<nav data-toc=""></nav><h1>Intro</h1>';
+    const doc = parse(await preparePrintHtml(html, { numberHeadings: false }));
+    const a = doc.querySelector("a.toc-entry")!;
+    expect(a.classList.contains("baked")).toBe(false);
+    expect(a.querySelector(".toc-page")).toBeNull();
+  });
+
   it("citações sem engine carregada viram texto pandoc cru", async () => {
     const html = '<p>ver <span data-citation="" data-keys="silva2020"></span></p>';
     const doc = parse(await preparePrintHtml(html, { numberHeadings: false }));

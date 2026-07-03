@@ -6,7 +6,7 @@ import type { PrintOptions } from "../lib/pdf";
 import type { Settings } from "../lib/settings";
 import { tabTitle, type Tab } from "../lib/tabs";
 import { chromeRange, effectiveLayout, type DocLayout } from "../editor/DocLayout";
-import { getPageCount } from "../editor/PageBreaks";
+import { getBreakOffsets, getPageCount } from "../editor/PageBreaks";
 import type { SavableTab } from "./useDocumentTabs";
 
 interface FileOperationsDeps {
@@ -107,6 +107,27 @@ export function useFileOperations({
     if (!editor) return;
     const at = tabsRef.current.find((t) => t.id === activeIdRef.current);
     const layout = effectiveLayout(editor.state.doc, settings);
+    const { from, startValue } = chromeRange(layout);
+
+    // TOC page numbers, baked from the editor's own breaks (convergent with
+    // paged.js) and shifted like the header numbering (ABNT). Classic format
+    // has no real breaks to read — the TOC falls back to target-counter.
+    let tocPages: number[] | undefined;
+    let captionPages: number[] | undefined;
+    if (layout.pageFormat !== "classic") {
+      const breaks = getBreakOffsets(editor.state);
+      const shift = startValue - from;
+      const pageAt = (pos: number) => 1 + breaks.filter((o) => o <= pos).length + shift;
+      const headings: number[] = [];
+      const captions: number[] = [];
+      editor.state.doc.descendants((node, pos) => {
+        if (node.type.name === "heading") headings.push(pageAt(pos));
+        if (node.type.name === "caption") captions.push(pageAt(pos));
+      });
+      tocPages = headings;
+      captionPages = captions;
+    }
+
     setPrintJob({
       html: editor.getHTML(),
       options: {
@@ -115,11 +136,13 @@ export function useFileOperations({
         margins: layout.pageMargins,
         header: layout.pageHeader,
         footer: layout.pageFooter,
-        chromeFrom: chromeRange(layout).from,
-        numberStart: chromeRange(layout).startValue,
+        chromeFrom: from,
+        numberStart: startValue,
         pageCount: getPageCount(editor.state),
         numberHeadings: layout.numberHeadings,
         styles: layout.styles ?? null,
+        tocPages,
+        captionPages,
       },
     });
   }, [editorRef, tabsRef, activeIdRef, settings]);

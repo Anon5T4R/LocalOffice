@@ -42,6 +42,13 @@ export interface PrintOptions {
   pageCount?: number;
   /** Bake automatic heading numbers (1, 1.1…) into the printed text. */
   numberHeadings: boolean;
+  /** DISPLAYED page number of each TOC heading / caption, in document order
+   *  (editor breaks + chromeRange shift). When present, the TOC prints these
+   *  literal numbers — paged.js's target-counter doesn't survive real
+   *  printing (imprimia "0") and wouldn't know the ABNT offset anyway.
+   *  Absent (classic format): fall back to target-counter. */
+  tocPages?: number[];
+  captionPages?: number[];
   /** Named per-document styles — MUST mirror what the editor rendered with,
    *  or the PDF paginates differently from the on-screen pages. */
   styles?: DocStyles | null;
@@ -68,7 +75,7 @@ export interface PrintOptions {
  */
 export async function preparePrintHtml(
   html: string,
-  opts: Pick<PrintOptions, "numberHeadings">
+  opts: Pick<PrintOptions, "numberHeadings" | "tocPages" | "captionPages">
 ): Promise<string> {
   const needsWork =
     opts.numberHeadings ||
@@ -164,7 +171,7 @@ export async function preparePrintHtml(
 
   // TOC placeholders → anchor list (page number via ::after + target-counter).
   // data-toc="" lists headings; data-toc="figures"/"tables" lists captions.
-  const appendTocEntry = (nav: Element, href: string, text: string, level: number) => {
+  const appendTocEntry = (nav: Element, href: string, text: string, level: number, page?: number) => {
     const a = doc.createElement("a");
     a.href = href;
     a.className = `toc-entry lvl-${level}`;
@@ -174,6 +181,15 @@ export async function preparePrintHtml(
     const dots = doc.createElement("span");
     dots.className = "toc-dots";
     a.append(title, dots);
+    if (page !== undefined) {
+      // Literal page number from the editor's convergent breaks; the `baked`
+      // class turns the target-counter ::after fallback off for this entry.
+      a.classList.add("baked");
+      const num = doc.createElement("span");
+      num.className = "toc-page";
+      num.textContent = String(page);
+      a.append(num);
+    }
     nav.appendChild(a);
   };
   doc.querySelectorAll("nav[data-toc]").forEach((nav) => {
@@ -186,16 +202,16 @@ export async function preparePrintHtml(
     if (kind === "figures" || kind === "tables") {
       header.textContent = kind === "figures" ? "Lista de Figuras" : "Lista de Tabelas";
       const want: CaptionEntry["kind"] = kind === "figures" ? "figure" : "table";
-      for (const c of captionEntries) {
-        if (c.kind !== want) continue;
-        appendTocEntry(nav, `#${c.id}`, `${c.label} — ${c.text}`, 1);
-      }
+      captionEntries.forEach((c, i) => {
+        if (c.kind !== want) return;
+        appendTocEntry(nav, `#${c.id}`, `${c.label} — ${c.text}`, 1, opts.captionPages?.[i]);
+      });
       return;
     }
     header.textContent = "Sumário";
-    for (const e of entries) {
-      appendTocEntry(nav, `#${e.id}`, e.text, e.level);
-    }
+    entries.forEach((e, i) => {
+      appendTocEntry(nav, `#${e.id}`, e.text, e.level, opts.tocPages?.[i]);
+    });
   });
 
   return doc.body.innerHTML;
@@ -332,6 +348,7 @@ export function buildPrintCss(opts: PrintOptions): string {
     }
     .print-content .toc-dots { flex: 1; min-width: 24px; border-bottom: 1px dotted #999; }
     .print-content a.toc-entry::after { content: target-counter(attr(href), page); }
+    .print-content a.toc-entry.baked::after { content: none; }
     .print-content a.toc-entry.lvl-2 { padding-left: 1.4em; }
     .print-content a.toc-entry.lvl-3 { padding-left: 2.8em; }
     .print-content a.toc-entry.lvl-4, .print-content a.toc-entry.lvl-5, .print-content a.toc-entry.lvl-6 { padding-left: 4.2em; }
@@ -391,6 +408,34 @@ export function renderPaged(
 
 let renderQueue: Promise<unknown> = Promise.resolve();
 
+/**
+ * paged.js 0.4.3's UndisplayedFilter has an inverted check: any element whose
+ * inline `style` attribute does NOT declare `display` gets marked
+ * data-undisplayed — and the chunker then skips those elements when applying
+ * break points. TipTap serializes every styled block with inline style
+ * (line-height, text-align…), so whole documents get skipped: manual page
+ * breaks land on the next unstyled element (capa ABNT imprimia contínua e o
+ * sumário engolia as seções). This handler runs in the same `filter` stage,
+ * right after theirs, and unmarks everything that isn't literally
+ * display:none.
+ */
+let undisplayedFixRegistered = false;
+async function registerUndisplayedFix(): Promise<void> {
+  if (undisplayedFixRegistered) return;
+  const { Handler, registerHandlers } = await import("pagedjs");
+  class FixInlineStyledUndisplayed extends Handler {
+    filter(content: DocumentFragment) {
+      content.querySelectorAll("[data-undisplayed]").forEach((el) => {
+        if ((el as HTMLElement).style.display !== "none") {
+          delete (el as HTMLElement).dataset.undisplayed;
+        }
+      });
+    }
+  }
+  registerHandlers(FixInlineStyledUndisplayed);
+  undisplayedFixRegistered = true;
+}
+
 async function doRenderPaged(
   contentHtml: string,
   container: HTMLElement,
@@ -400,6 +445,7 @@ async function doRenderPaged(
   // Lazy import: paged.js is only needed for print/preview, so it lives in its
   // own chunk and never delays app startup.
   const { Previewer } = await import("pagedjs");
+  await registerUndisplayedFix();
 
   // The caller may have unmounted while waiting in the queue.
   if (!container.isConnected) throw new Error("preview container detached");

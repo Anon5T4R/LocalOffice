@@ -1177,6 +1177,30 @@ body {
     margin: 0 !important;
     box-shadow: none !important;
   }
+
+  /* paged.js's own print CSS sizes the sheets with `height: 100%`, assuming
+     the pages hang directly under <body>. Ours live under
+     #root > .print-preview > .print-preview-pages, where those percentages
+     resolve against auto and COLLAPSE: the sheets lose their fixed height,
+     the first print sheet comes out blank and every page's content drifts
+     into the next (visto num A4 real impresso via Microsoft Print to PDF).
+     Pin the heights back to the page box the fragmenter computed. */
+  #root,
+  .print-preview,
+  .print-preview-pages {
+    height: auto !important;
+  }
+  .pagedjs_pages {
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+  }
+  .print-preview-pages .pagedjs_page,
+  .print-preview-pages .pagedjs_sheet {
+    height: var(--pagedjs-pagebox-height) !important;
+    min-height: 0 !important;
+    max-height: none !important;
+  }
 }
 
 .page {

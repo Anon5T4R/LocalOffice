@@ -38,6 +38,13 @@ const SHEET_GAP_PX = 28;
 // which drives {title} in the header/footer but lives on a DOM dataset).
 const scheduleByView = new WeakMap<EditorView, () => void>();
 
+/** Document offsets where the drawn page breaks sit (break BEFORE each
+ *  offset). Lets the print pipeline map a node position to its page — the
+ *  breaks are convergent with paged.js, so the mapping holds on paper. */
+export function getBreakOffsets(state: EditorState): number[] {
+  return (key.getState(state)?.points ?? []).map((p) => p.offset);
+}
+
 /** Current page count, for StatusBar to show a number consistent with the
  *  breaks actually drawn (not an independent scrollHeight/printable guess,
  *  which would drift once the gap decorations themselves add height). */
