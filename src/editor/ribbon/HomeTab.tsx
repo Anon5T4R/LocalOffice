@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { useEditorState } from "@tiptap/react";
 import { useEditorInstance } from "../../state/EditorContext";
 import { useSettings } from "../../state/SettingsContext";
+import { cssSizeToPt, ptToPx } from "../../lib/fontUnits";
 import { Btn } from "./Btn";
 import { CASE_FNS, buildFontList, transformCase } from "./shared";
 
@@ -96,13 +97,16 @@ export function HomeTab({ painterActive, onCopyFormat }: HomeTabProps) {
             type="number"
             min={1}
             max={999}
-            value={s.fontSize ? parseInt(s.fontSize).toString() : ""}
+            step={0.5}
+            value={cssSizeToPt(s.fontSize) ?? ""}
             placeholder="Tam."
             onChange={(e) => {
-              const v = e.target.value;
-              if (v) chain().setFontSize(v + "px").run();
+              const v = parseFloat(e.target.value);
+              // A UI fala pontos (o "12" da ABNT/Word); o mark grava px, a
+              // unidade de todo o motor de layout (lib/fontUnits.ts).
+              if (!Number.isNaN(v) && v > 0) chain().setFontSize(`${ptToPx(v)}px`).run();
             }}
-            title="Tamanho da fonte (digite um valor ou selecione)"
+            title="Tamanho da fonte em pontos (o mesmo 12 do Word/ABNT)"
             list="font-sizes"
           />
           <datalist id="font-sizes">

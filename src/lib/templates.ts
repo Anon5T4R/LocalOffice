@@ -1,5 +1,9 @@
 import { Editor } from "@tiptap/core";
+import { ptToPx } from "./fontUnits";
 import { HeaderFooterSpec, PageFormat, PageMargins } from "./settings";
+
+/** Norm sizes are given in points; every internal metric is px (fontUnits). */
+const pt = (n: number) => `${ptToPx(n)}px`;
 
 export interface DocTemplate {
   name: string;
@@ -15,6 +19,12 @@ export interface DocTemplate {
   footer?: HeaderFooterSpec;
   /** Print header/footer on the first page (ABNT/APA hide it on cover pages). */
   chromeOnFirst?: boolean;
+  /** First PHYSICAL page that shows header/footer (ABNT: 4 — capa, folha de
+   *  rosto e sumário ficam sem número). Undefined = clear (chromeOnFirst rules). */
+  chromeFrom?: number;
+  /** Number DISPLAYED on that first chrome page (ABNT: 3 — a capa não conta
+   *  na numeração). Undefined = the physical page number. */
+  numberStart?: number;
   /** Starter document (cover page etc.), inserted only when the doc is empty. */
   content?: () => string;
 }
@@ -62,25 +72,30 @@ function abntContent(): string {
 export const TEMPLATES: Record<string, DocTemplate> = {
   abnt: {
     name: "ABNT (NBR 14724)",
-    description: "Trabalhos acadêmicos — 3cm top/left, 2cm bottom/right",
+    description: "Trabalhos acadêmicos — 3cm top/left, 2cm bottom/right, fonte 12pt",
     pageFormat: "a4",
     margins: { top: 113, bottom: 76, left: 113, right: 76 },
     fontFamily: "Times New Roman",
-    fontSize: "12px",
+    fontSize: pt(12),
     lineHeight: "1.5",
     textAlign: "justify",
     header: { left: "", center: "", right: "{page}" },
     footer: { left: "", center: "", right: "" },
     chromeOnFirst: false,
+    // NBR 14724: conta-se a partir da folha de rosto (a capa não conta) e o
+    // número só aparece a partir da parte textual — no starter: capa (1),
+    // folha de rosto (2), sumário (3), Introdução (4, exibida como "3").
+    chromeFrom: 4,
+    numberStart: 3,
     content: abntContent,
   },
   apa: {
     name: "APA 7ª ed.",
-    description: "Psicologia, educação — 1 polegada (2.54cm) todas",
+    description: "Psicologia, educação — 1 polegada (2.54cm) todas, fonte 12pt",
     pageFormat: "letter",
     margins: { top: 96, bottom: 96, left: 96, right: 96 },
     fontFamily: "Times New Roman",
-    fontSize: "12px",
+    fontSize: pt(12),
     lineHeight: "2.0",
     textAlign: "left",
     header: { left: "{title}", center: "", right: "{page}" },
@@ -89,22 +104,22 @@ export const TEMPLATES: Record<string, DocTemplate> = {
   },
   artigo: {
     name: "Artigo científico",
-    description: "Periódicos — A4, 2.5cm margens, Times 12",
+    description: "Periódicos — A4, 2.5cm margens, Times 12pt",
     pageFormat: "a4",
     margins: { top: 94, bottom: 94, left: 94, right: 94 },
     fontFamily: "Times New Roman",
-    fontSize: "12px",
+    fontSize: pt(12),
     lineHeight: "1.5",
     textAlign: "justify",
     footer: { left: "", center: "{page}", right: "" },
   },
   relatorio: {
     name: "Relatório técnico",
-    description: "Empresarial — A4, margens moderadas, Arial 11",
+    description: "Empresarial — A4, margens moderadas, Arial 11pt",
     pageFormat: "a4",
     margins: { top: 57, bottom: 57, left: 71, right: 57 },
     fontFamily: "Arial",
-    fontSize: "11px",
+    fontSize: pt(11),
     lineHeight: "1.15",
     textAlign: "left",
     header: { left: "{title}", center: "", right: "" },
@@ -112,11 +127,11 @@ export const TEMPLATES: Record<string, DocTemplate> = {
   },
   carta: {
     name: "Carta comercial",
-    description: "Carta (216×279mm), margens 1in, Times 12",
+    description: "Carta (216×279mm), margens 1in, Times 12pt",
     pageFormat: "letter",
     margins: { top: 96, bottom: 96, left: 96, right: 96 },
     fontFamily: "Times New Roman",
-    fontSize: "12px",
+    fontSize: pt(12),
     lineHeight: "1.15",
     textAlign: "left",
   },
@@ -159,6 +174,9 @@ export function applyTemplateContent(editor: Editor, tmpl: DocTemplate): void {
     }
   });
 
-  // Run all operations
+  // Run all operations, then leave the caret where the user expects to start
+  // reading/typing — the per-node ops above drag the selection through the
+  // whole document and would otherwise abandon it on the last block.
   ops.forEach((fn) => fn());
+  editor.commands.focus("start", { scrollIntoView: true });
 }

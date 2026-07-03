@@ -20,6 +20,12 @@ export function contentTypographyCss(scope: string): string {
   return `
     ${scope} { font-size: 16px; line-height: 1.7; overflow-wrap: anywhere; }
     ${scope} p { orphans: 2; widows: 2; }
+    /* Empty paragraphs must occupy one line on BOTH sides. In the editor
+       ProseMirror gives them a real line via <br> (so :empty never matches
+       there); serialized HTML has bare <p></p>, which would collapse to zero
+       height in print and shift every page break (ABNT starter: 6 páginas no
+       editor virando 4 no PDF). */
+    ${scope} p:empty::before { content: "\\00a0"; }
     ${scope} > * + * { margin-top: 0.75em; }
     ${scope} h1 { font-size: 1.9em; line-height: 1.25; margin-top: 1.2em; }
     ${scope} h2 { font-size: 1.5em; margin-top: 1.1em; }

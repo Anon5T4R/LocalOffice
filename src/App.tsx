@@ -193,6 +193,10 @@ function App() {
         ...(tmpl.header && { pageHeader: tmpl.header }),
         ...(tmpl.footer && { pageFooter: tmpl.footer }),
         ...(tmpl.chromeOnFirst !== undefined && { pageChromeOnFirst: tmpl.chromeOnFirst }),
+        // Always set (null clears): trocar de modelo não pode herdar a
+        // numeração deslocada do anterior (ex.: ABNT -> APA).
+        pageChromeFrom: tmpl.chromeFrom ?? null,
+        pageNumberStart: tmpl.numberStart ?? null,
       });
       // Deferred out of the React event: setContent instantiates NodeViews
       // (TOC, bibliography) through flushSync, which React rejects mid-render.
