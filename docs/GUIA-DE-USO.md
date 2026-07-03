@@ -37,9 +37,10 @@ O fluxo completo, na ordem:
    A4, margens 3/2cm, Times 12pt, entrelinha 1,5, justificado, e a numeração
    correta da norma — **páginas pré-textuais sem número; a Introdução
    (4ª página física) exibe "3"**, porque a capa não conta. Se você inserir
-   páginas pré-textuais (resumo, listas), ajuste em
-   `⚙ Configurações ▸ Numeração avançada` ("mostrar a partir da página física
-   N, numerada como M").
+   páginas pré-textuais (resumo, listas), ajuste a numeração avançada no
+   diálogo de cabeçalho/rodapé (duplo clique na margem da página, ou
+   `Inserir ▸ ▤ Cabeçalho`): "mostrar a partir da página física N, numerada
+   como M".
 2. **Estilos do documento** — `Layout ▸ ¶A Estilos`: fonte/tamanho (em pt)/
    entrelinha/alinhamento/recuo por tipo de bloco (Parágrafo, Títulos 1–3,
    Citação, Legenda). Vale idêntico no PDF e viaja com o arquivo.
@@ -77,8 +78,11 @@ O fluxo completo, na ordem:
 
 - **Modelos prontos** — `Layout ▸ Modelos ▾`: Relatório técnico (Arial 11pt,
   rodapé "N de M"), Carta comercial, Artigo científico, APA.
-- **Cabeçalho/rodapé** — `⚙ Configurações`: campos esquerda/centro/direita
-  com marcadores `{page}`, `{pages}`, `{title}`, `{date}`.
+- **Cabeçalho/rodapé** — `Inserir ▸ ▤ Cabeçalho`, `Layout ▸ ▤ Cab./Rodapé`
+  ou **duplo clique na margem da página**: campos esquerda/centro/direita
+  com marcadores `{page}`, `{pages}`, `{title}`, `{date}`, primeira página
+  sem número e numeração avançada (ABNT). Vale para o documento (viaja com
+  o arquivo).
 - **Página** — `Layout`: Clássica (rolagem infinita) ou paginada
   (A4/A5/Carta/A3) com quebras reais no editor; margens por preset ou
   personalizadas; quebra manual pelo menu `/`.

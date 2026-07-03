@@ -1370,6 +1370,9 @@ body {
   flex-direction: column;
   box-sizing: border-box;
   padding: 6px 2px;
+  /* Duplo clique aqui abre o diálogo de cabeçalho/rodapé (delegado no
+     .editor-scroll, App.tsx) — o cursor de texto mentiria sobre o gesto. */
+  cursor: default;
 }
 .ProseMirror .page-margin-top {
   justify-content: flex-start;

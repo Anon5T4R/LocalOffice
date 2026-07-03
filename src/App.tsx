@@ -13,6 +13,7 @@ import { AiPanel } from "./ai/AiPanel";
 import { AiBubbleMenu } from "./ai/AiBubbleMenu";
 import { useLocalAi } from "./ai/useLocalAi";
 import { SettingsModal } from "./SettingsModal";
+import { HeaderFooterModal } from "./editor/HeaderFooterModal";
 import { VersionHistory } from "./VersionHistory";
 import { PrintPreview } from "./PrintPreview";
 import { DocTemplate, applyTemplateContent } from "./lib/templates";
@@ -96,6 +97,7 @@ function App() {
   });
 
   const [showSettings, setShowSettings] = useState(false);
+  const [showHeaderFooter, setShowHeaderFooter] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   const [chaptersOpen, setChaptersOpen] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
@@ -327,12 +329,25 @@ function App() {
       <TabStrip tabs={tabs} activeId={activeId} onSelect={switchTab} onClose={closeTab} onNew={newBlankTab} />
       <EditorProvider editor={editor}>
         <Ribbon onInsertImage={handleInsertImage} onApplyTemplate={handleApplyTemplate} />
+        {showHeaderFooter && editor && (
+          <HeaderFooterModal onClose={() => setShowHeaderFooter(false)} />
+        )}
         {editor && <AiBubbleMenu editor={editor} ai={ai} onOpenPanel={() => setAiOpen(true)} />}
         <div className="workspace">
           {chaptersOpen && <ChaptersPanel onClose={() => setChaptersOpen(false)} />}
           {reviewOpen && <ReviewPanel onClose={() => setReviewOpen(false)} />}
           <div className="editor-main">
-            <div className="editor-scroll" ref={scrollRef}>
+            <div
+              className="editor-scroll"
+              ref={scrollRef}
+              onDoubleClick={(e) => {
+                // Duplo clique na faixa de margem da página (decoração do
+                // PageBreaks) abre o diálogo de cabeçalho/rodapé — o gesto do
+                // Word. Delegado aqui porque as decorações são destruídas e
+                // recriadas a cada remedição das quebras.
+                if ((e.target as HTMLElement).closest(".page-margin")) setShowHeaderFooter(true);
+              }}
+            >
               {showSearch && <SearchBar onClose={() => setShowSearch(false)} />}
               <div className="pages-container" style={{ zoom: zoomFactor }}>
                 <div className={`page${isPaginated ? " fixed" : ""}`} style={pageStyle}>
@@ -348,8 +363,7 @@ function App() {
       {showSettings && (
         <SettingsModal
           onClose={() => setShowSettings(false)}
-          docLayout={docLayout}
-          onDocLayoutChange={(patch) => editor && patchDocLayout(editor, settings, patch)}
+          onOpenHeaderFooter={() => setShowHeaderFooter(true)}
         />
       )}
       {showVersionHistory && activeTab && (

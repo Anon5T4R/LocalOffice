@@ -3,6 +3,7 @@ import { useEditorState } from "@tiptap/react";
 import { useEditorInstance } from "../../state/EditorContext";
 import { Modal } from "../../components/Modal";
 import { listCrossRefTargets, type CrossRefTarget } from "../CrossRef";
+import { HeaderFooterModal } from "../HeaderFooterModal";
 import { Btn } from "./Btn";
 
 /** "Inserir": tabelas, imagem, link, quebras, notas, sumário, citações. */
@@ -10,6 +11,7 @@ export function InsertTab({ onInsertImage }: { onInsertImage: () => void }) {
   const editor = useEditorInstance();
   // null = picker fechado; a lista é recalculada na abertura, não a cada render.
   const [refTargets, setRefTargets] = useState<CrossRefTarget[] | null>(null);
+  const [showHeaderFooter, setShowHeaderFooter] = useState(false);
 
   const s = useEditorState({
     editor,
@@ -53,6 +55,13 @@ export function InsertTab({ onInsertImage }: { onInsertImage: () => void }) {
         <Btn onClick={setLink} active={s.link} title="Inserir/editar link" wide>🔗 Link</Btn>
         <Btn onClick={() => chain().setHorizontalRule().run()} title="Linha divisória" wide>— Linha</Btn>
         <Btn onClick={() => chain().setPageBreak().run()} title="Quebra de página (nova página no PDF)" wide>⤓ Quebra</Btn>
+        <Btn
+          onClick={() => setShowHeaderFooter(true)}
+          title="Cabeçalho e rodapé da página (também: duplo clique na margem da página)"
+          wide
+        >
+          ▤ Cabeçalho
+        </Btn>
         <Btn onClick={() => chain().addFootnote().run()} title="Nota de rodapé (Ctrl+Alt+F)" wide>⁺ Nota</Btn>
         <Btn onClick={() => chain().insertMath().run()} title='Equação LaTeX (ou digite "$x$" no texto)' wide>√x Equação</Btn>
         <Btn onClick={() => chain().insertCaption().run()} title="Legenda numerada para a figura/tabela selecionada" wide>🏷 Legenda</Btn>
@@ -71,6 +80,7 @@ export function InsertTab({ onInsertImage }: { onInsertImage: () => void }) {
         <Btn onClick={() => chain().toggleCodeBlock().run()} active={s.codeBlock} title="Bloco de código" wide>{"{ } Código"}</Btn>
       </div>
 
+      {showHeaderFooter && <HeaderFooterModal onClose={() => setShowHeaderFooter(false)} />}
       {refTargets && (
         <Modal
           title="Inserir referência cruzada"

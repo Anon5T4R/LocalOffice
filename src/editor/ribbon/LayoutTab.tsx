@@ -6,6 +6,7 @@ import type { PageFormat } from "../../lib/settings";
 import { TEMPLATES, type DocTemplate } from "../../lib/templates";
 import { effectiveLayout, patchDocLayout } from "../DocLayout";
 import { StylesModal } from "../StylesModal";
+import { HeaderFooterModal } from "../HeaderFooterModal";
 import { Btn } from "./Btn";
 import { MARGIN_PRESETS, currentMarginPreset } from "./shared";
 
@@ -14,6 +15,7 @@ export function LayoutTab({ onApplyTemplate }: { onApplyTemplate: (tmpl: DocTemp
   const editor = useEditorInstance();
   const { settings } = useSettings();
   const [showStyles, setShowStyles] = useState(false);
+  const [showHeaderFooter, setShowHeaderFooter] = useState(false);
   const { pageFormat, pageMargins, numberHeadings, styles } = effectiveLayout(editor.state.doc, settings);
 
   const s = useEditorState({
@@ -160,6 +162,13 @@ export function LayoutTab({ onApplyTemplate }: { onApplyTemplate: (tmpl: DocTemp
 
       <div className="tb-group">
         <Btn
+          onClick={() => setShowHeaderFooter(true)}
+          title="Cabeçalho e rodapé da página (também: duplo clique na margem da página)"
+          wide
+        >
+          ▤ Cab./Rodapé
+        </Btn>
+        <Btn
           onClick={() => setShowStyles(true)}
           active={!!styles && Object.keys(styles).length > 0}
           title="Estilos do documento (fonte, tamanho, entrelinha, alinhamento por tipo de bloco)"
@@ -169,6 +178,7 @@ export function LayoutTab({ onApplyTemplate }: { onApplyTemplate: (tmpl: DocTemp
         </Btn>
       </div>
       {showStyles && <StylesModal onClose={() => setShowStyles(false)} />}
+      {showHeaderFooter && <HeaderFooterModal onClose={() => setShowHeaderFooter(false)} />}
     </div>
   );
 }

@@ -227,7 +227,7 @@ function chromeRow(kind: "header" | "footer", spec: HeaderFooterSpec, page: numb
   if (slots.every((s) => !s.trim())) return null;
   const row = document.createElement("div");
   row.className = `page-chrome page-chrome-${kind}`;
-  row.title = kind === "header" ? "Cabeçalho (edite em Layout)" : "Rodapé (edite em Layout)";
+  row.title = kind === "header" ? "Cabeçalho — duplo clique para editar" : "Rodapé — duplo clique para editar";
   for (const text of slots) {
     const slot = document.createElement("span");
     slot.className = "page-chrome-slot";

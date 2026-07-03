@@ -1,7 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
-import { HeaderFooterSpec, Theme, clearRecents } from "./lib/settings";
-import type { DocLayout } from "./editor/DocLayout";
+import { Theme, clearRecents } from "./lib/settings";
 import * as citationStore from "./lib/citationStore";
 import { useSettings } from "./state/SettingsContext";
 import { Modal } from "./components/Modal";
@@ -16,42 +15,11 @@ const CSL_STYLE_OPTIONS = [
 
 interface SettingsModalProps {
   onClose: () => void;
-  /** Effective layout of the active document (see editor/DocLayout.ts). */
-  docLayout: DocLayout;
-  onDocLayoutChange: (patch: Partial<DocLayout>) => void;
+  /** Opens the document's header/footer dialog (editor/HeaderFooterModal.tsx). */
+  onOpenHeaderFooter: () => void;
 }
 
-/** Three aligned inputs (left/center/right) for one line of page chrome. */
-function HeaderFooterRow({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: HeaderFooterSpec;
-  onChange: (next: HeaderFooterSpec) => void;
-}) {
-  const slot = (key: keyof HeaderFooterSpec, placeholder: string) => (
-    <input
-      value={value[key]}
-      spellCheck={false}
-      placeholder={placeholder}
-      onChange={(e) => onChange({ ...value, [key]: e.target.value })}
-    />
-  );
-  return (
-    <div className="ai-field">
-      <span>{label}</span>
-      <div className="hf-row">
-        {slot("left", "esquerda")}
-        {slot("center", "centro")}
-        {slot("right", "direita")}
-      </div>
-    </div>
-  );
-}
-
-export function SettingsModal({ onClose, docLayout, onDocLayoutChange }: SettingsModalProps) {
+export function SettingsModal({ onClose, onOpenHeaderFooter }: SettingsModalProps) {
   const { settings, updateSettings: onChange } = useSettings();
   useSyncExternalStore(citationStore.subscribe, citationStore.getVersion);
   const bibError = citationStore.getError();
@@ -119,59 +87,19 @@ export function SettingsModal({ onClose, docLayout, onDocLayoutChange }: Setting
             </select>
           </label>
 
-          <HeaderFooterRow
-            label="Cabeçalho (impressão)"
-            value={docLayout.pageHeader}
-            onChange={(pageHeader) => onDocLayoutChange({ pageHeader })}
-          />
-          <HeaderFooterRow
-            label="Rodapé (impressão)"
-            value={docLayout.pageFooter}
-            onChange={(pageFooter) => onDocLayoutChange({ pageFooter })}
-          />
-          <label className="ai-field hf-first-page">
-            <span>
-              <input
-                type="checkbox"
-                checked={docLayout.pageChromeOnFirst}
-                disabled={docLayout.pageChromeFrom != null}
-                onChange={(e) => onDocLayoutChange({ pageChromeOnFirst: e.target.checked })}
-              />{" "}
-              Mostrar cabeçalho/rodapé na primeira página
-            </span>
-          </label>
           <div className="ai-field">
-            <span>Numeração avançada (ABNT: número só na parte textual)</span>
-            <div className="hf-row">
-              <span className="modal-note" style={{ margin: 0 }}>Mostrar a partir da página física</span>
-              <input
-                type="number"
-                min={1}
-                style={{ width: 64 }}
-                placeholder="auto"
-                value={docLayout.pageChromeFrom ?? ""}
-                onChange={(e) => {
-                  const v = parseInt(e.target.value, 10);
-                  onDocLayoutChange({ pageChromeFrom: Number.isNaN(v) ? null : Math.max(1, v) });
-                }}
-              />
-              <span className="modal-note" style={{ margin: 0 }}>numerada como</span>
-              <input
-                type="number"
-                min={0}
-                style={{ width: 64 }}
-                placeholder="igual"
-                value={docLayout.pageNumberStart ?? ""}
-                onChange={(e) => {
-                  const v = parseInt(e.target.value, 10);
-                  onDocLayoutChange({ pageNumberStart: Number.isNaN(v) ? null : v });
-                }}
-              />
-            </div>
+            <span>Cabeçalho e rodapé (do documento)</span>
+            <button
+              className="tb-btn"
+              onClick={() => {
+                onClose();
+                onOpenHeaderFooter();
+              }}
+              title="Abre o diálogo do documento ativo — também em Inserir, Layout ou com duplo clique na margem da página"
+            >
+              Abrir diálogo…
+            </button>
           </div>
-          <p className="modal-note">
-            Use os marcadores {"{page}"}, {"{pages}"}, {"{title}"} e {"{date}"} — ex.: "Página {"{page}"} de {"{pages}"}".
-          </p>
 
           <div className="ai-field">
             <span>Bibliografia (.bib do Zotero ou CSL-JSON)</span>
