@@ -163,6 +163,16 @@ const turndown = new TurndownService({
     if (el.nodeName === "SPAN" && el.hasAttribute?.("data-ooxml")) {
       return ooxmlRawReplacement(el);
     }
+    // Block-level raw OOXML (exportPrep: a full <w:p> with alignment/indent).
+    // A FENCED code block, not the inline backtick span — pandoc reads a
+    // fenced ```{=openxml} as a RawBlock and inserts it at body level, so a
+    // whole <w:p> is valid there (an inline raw would nest inside a run).
+    if (el.nodeName === "DIV" && el.hasAttribute?.("data-ooxml-block")) {
+      const xml = el.getAttribute("data-ooxml-block") ?? "";
+      const longestRun = Math.max(0, ...(xml.match(/`+/g) ?? []).map((r) => r.length));
+      const fence = "`".repeat(Math.max(3, longestRun + 1));
+      return `\n\n${fence}{=openxml}\n${xml}\n${fence}\n\n`;
+    }
     if (el.nodeName === "DIV" && el.hasAttribute?.("data-bibliography")) {
       return '\n\n<div data-bibliography=""></div>\n\n';
     }
