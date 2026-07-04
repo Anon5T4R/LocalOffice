@@ -12,6 +12,79 @@ import type { DocFormat } from "./document";
  *  blocks in their own paragraph; see docxFields.ts). */
 const OOXML_PAGE_BREAK = '<w:r><w:br w:type="page"/></w:r>';
 
+function escapeXml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+/** CSS length ("8cm", "48px", "1.25cm") to OOXML twips (1cm = 567tw, 96dpi). */
+function lengthToTwips(value: string): number {
+  const m = /^([\d.]+)\s*(cm|px|pt|mm)?$/.exec(value.trim());
+  if (!m) return 0;
+  const n = parseFloat(m[1]);
+  switch (m[2]) {
+    case "px": return Math.round((n / 96) * 1440);
+    case "pt": return Math.round(n * 20);
+    case "mm": return Math.round((n / 10) * 567);
+    case "cm":
+    default: return Math.round(n * 567);
+  }
+}
+
+/** A run of text with bold/italic context → an OOXML <w:r>. Font/size are
+ *  left to the paragraph's Normal style (the reference doc makes it Times
+ *  12pt), so the runs only carry the marks pandoc's HTML reader would drop
+ *  anyway once inside a raw block. */
+function ooxmlRun(text: string, bold: boolean, italic: boolean): string {
+  if (!text) return "";
+  const rpr = `${bold ? "<w:b/>" : ""}${italic ? "<w:i/>" : ""}`;
+  return `<w:r>${rpr ? `<w:rPr>${rpr}</w:rPr>` : ""}<w:t xml:space="preserve">${escapeXml(text)}</w:t></w:r>`;
+}
+
+/** Serialize a paragraph's inline content to OOXML runs, honoring bold/italic
+ *  (strong/b, em/i); spans are transparent (their font is the doc default). */
+function inlineRuns(node: Node, bold: boolean, italic: boolean): string {
+  let out = "";
+  node.childNodes.forEach((child) => {
+    if (child.nodeType === Node.TEXT_NODE) {
+      out += ooxmlRun(child.textContent ?? "", bold, italic);
+      return;
+    }
+    if (child.nodeType !== Node.ELEMENT_NODE) return;
+    const tag = child.nodeName;
+    if (tag === "STRONG" || tag === "B") out += inlineRuns(child, true, italic);
+    else if (tag === "EM" || tag === "I") out += inlineRuns(child, bold, true);
+    else if (tag === "BR") out += "<w:r><w:br/></w:r>";
+    else out += inlineRuns(child, bold, italic); // span, etc.
+  });
+  return out;
+}
+
+/** OOXML paragraph properties (alignment + indent) from a <p>'s inline style,
+ *  or "" when the paragraph carries none. */
+function paragraphProps(style: CSSStyleDeclaration): string {
+  const align = style.textAlign;
+  const jc =
+    align === "center" ? '<w:jc w:val="center"/>' :
+    align === "right" ? '<w:jc w:val="right"/>' :
+    align === "justify" ? '<w:jc w:val="both"/>' : "";
+  const left = style.marginLeft ? lengthToTwips(style.marginLeft) : 0;
+  const firstLine = style.textIndent ? lengthToTwips(style.textIndent) : 0;
+  const ind = left || firstLine
+    ? `<w:ind${left ? ` w:left="${left}"` : ""}${firstLine ? ` w:firstLine="${firstLine}"` : ""}/>`
+    : "";
+  return jc || ind ? `<w:pPr>${jc}${ind}</w:pPr>` : "";
+}
+
+/** Whether a paragraph's style carries formatting pandoc's HTML→docx would
+ *  drop (alignment other than left, a left margin, or a first-line indent). */
+function hasBakeableStyle(style: CSSStyleDeclaration): boolean {
+  const a = style.textAlign;
+  return (
+    a === "center" || a === "right" || a === "justify" ||
+    !!style.marginLeft || !!style.textIndent
+  );
+}
+
 const TOC_TITLES: Record<string, string> = {
   "": "Sumário",
   figures: "Lista de Figuras",
@@ -37,8 +110,12 @@ const TOC_TITLES: Record<string, string> = {
 export function prepareForPandoc(html: string, format: DocFormat): string {
   // Empty paragraphs may carry attributes (text-align on a centered blank
   // line), so the cheap gate has to be a regex, not includes("<p></p>").
+  // style= gates the alignment/indent baking (docx only, below).
   const needsWork =
-    html.includes("data-page-break") || html.includes("data-toc") || /<p[^>]*><\/p>/.test(html);
+    html.includes("data-page-break") ||
+    html.includes("data-toc") ||
+    /<p[^>]*><\/p>/.test(html) ||
+    (format === "docx" && html.includes("style="));
   if (!needsWork) return html;
   const doc = new DOMParser().parseFromString(html, "text/html");
 
@@ -74,10 +151,35 @@ export function prepareForPandoc(html: string, format: DocFormat): string {
   });
 
   // :empty misses nothing here: the editor serializes blank lines as bare
-  // <p></p> (attributes like text-align may exist, children never).
+  // <p></p> (attributes like text-align may exist, children never). Do this
+  // BEFORE the alignment bake so a styled-but-empty spacer line stays a plain
+  // NBSP paragraph (nothing to center) instead of an empty OOXML paragraph.
   doc.querySelectorAll("p:empty").forEach((p) => {
     p.textContent = "\u00a0";
   });
+
+  // Alignment / indent bake (docx only): pandoc's HTML reader drops inline CSS
+  // (text-align, margin-left, text-indent), so a centered ABNT cover or an
+  // 8cm-indented "natureza do trabalho" arrives left-aligned. Rewrite those
+  // paragraphs as native OOXML (w:jc / w:ind) \u2014 the reference doc gives them
+  // Times 12pt, so together they reproduce the template. odt/rtf have no raw
+  // channel here; they keep the semantic-only output (documented limitation).
+  if (format === "docx") {
+    doc.querySelectorAll("p[style]").forEach((p) => {
+      const style = (p as HTMLElement).style;
+      if (!hasBakeableStyle(style)) return;
+      // Blank/NBSP-only spacer lines: leave as plain (NBSP) paragraphs —
+      // centering an empty line does nothing, and keeping them as ordinary
+      // paragraphs preserves the vertical spacing without extra OOXML.
+      if (!(p.textContent ?? "").trim()) return; // trim() remove NBSP (WhiteSpace do ES)
+      const runs = inlineRuns(p, false, false);
+      if (!runs) return;
+      const xml = `<w:p>${paragraphProps(style)}${runs}</w:p>`;
+      const block = doc.createElement("div");
+      block.setAttribute("data-ooxml-block", xml);
+      p.replaceWith(block);
+    });
+  }
 
   return doc.body.innerHTML;
 }

@@ -104,13 +104,35 @@ pub(crate) async fn export_via_pandoc(
     // the syntax, so always-on for the markdown reader is safe.
     let from_arg = if from == "markdown" { "markdown+raw_attribute" } else { from.as_str() };
 
-    let result = run_pandoc(
-        &app,
-        &[tmp_str.as_str(), "-f", from_arg, "-t", to.as_str(), "-o", path.as_str()],
-        "export",
-    )
-    .await;
+    // DOCX gets a reference doc whose Normal/heading styles are Times New Roman
+    // 12pt, so the whole document uses the ABNT font (pandoc's default is
+    // Calibri). The bytes are embedded in the binary and written to a temp file
+    // per export — pandoc needs a path, and this avoids resource-dir lookups.
+    // The alignment/indent of styled paragraphs comes through separately as raw
+    // OOXML (exportPrep.ts); together they reproduce the template in Word.
+    let reference_tmp = if to == "docx" {
+        let rt = std::env::temp_dir().join(format!("writer-reference-{}.docx", stamp));
+        let bytes: &[u8] = include_bytes!("../resources/reference-times.docx");
+        match tokio::fs::write(&rt, bytes).await {
+            Ok(_) => Some(rt),
+            Err(_) => None, // fall back to pandoc's default font rather than fail
+        }
+    } else {
+        None
+    };
+
+    let mut args: Vec<&str> = vec![tmp_str.as_str(), "-f", from_arg, "-t", to.as_str(), "-o", path.as_str()];
+    let ref_arg;
+    if let Some(rt) = &reference_tmp {
+        ref_arg = format!("--reference-doc={}", rt.to_string_lossy());
+        args.push(ref_arg.as_str());
+    }
+
+    let result = run_pandoc(&app, &args, "export").await;
 
     let _ = tokio::fs::remove_file(&tmp).await;
+    if let Some(rt) = &reference_tmp {
+        let _ = tokio::fs::remove_file(rt).await;
+    }
     result.map(|_| ())
 }
