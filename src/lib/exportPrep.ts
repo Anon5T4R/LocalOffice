@@ -85,6 +85,77 @@ function hasBakeableStyle(style: CSSStyleDeclaration): boolean {
   );
 }
 
+// --- ODF (odt) side -------------------------------------------------------
+// OpenDocument has no inline paragraph formatting: alignment/indent live in
+// NAMED styles. So instead of the docx path's arbitrary-value w:jc/w:ind, the
+// odt path maps a paragraph to one of a FIXED library of styles predefined in
+// the embedded reference-abnt.odt (see pandoc.rs). This covers the norm's
+// values (center/right/justify + the ABNT indents 1.25cm/8cm); an arbitrary
+// indent outside the set can't be expressed and falls back to alignment-only
+// or a plain paragraph (documented ODF limitation).
+
+/** OpenDocument page break: an empty paragraph in a break-before-page style. */
+const ODF_PAGE_BREAK = '<text:p text:style-name="LObreak"/>';
+
+/** A CSS length in centimeters, or null when it isn't a length we handle. */
+function lengthToCm(value: string): number | null {
+  const m = /^([\d.]+)\s*(cm|px|pt|mm)?$/.exec(value.trim());
+  if (!m) return null;
+  const n = parseFloat(m[1]);
+  switch (m[2]) {
+    case "px": return (n / 96) * 2.54;
+    case "pt": return (n / 72) * 2.54;
+    case "mm": return n / 10;
+    case "cm":
+    default: return n;
+  }
+}
+
+const near = (a: number, b: number) => Math.abs(a - b) < 0.05;
+
+/** Map a paragraph's style to one of the predefined ODF style names, or null
+ *  when nothing in the fixed library matches (leave it a plain paragraph). */
+function odfParagraphStyle(style: CSSStyleDeclaration): string | null {
+  const left = style.marginLeft ? lengthToCm(style.marginLeft) : null;
+  const firstLine = style.textIndent ? lengthToCm(style.textIndent) : null;
+  const align = style.textAlign;
+  if (left !== null && near(left, 8)) return "LOml";
+  const fi = firstLine !== null && near(firstLine, 1.25);
+  if (fi && align === "justify") return "LOjfi";
+  if (fi) return "LOfi";
+  if (align === "center") return "LOc";
+  if (align === "right") return "LOr";
+  if (align === "justify") return "LOj";
+  return null;
+}
+
+/** A run of text in an ODF <text:span> (bold/italic via predefined text
+ *  styles), or bare escaped text when unstyled. */
+function odfRun(text: string, bold: boolean, italic: boolean): string {
+  if (!text) return "";
+  const styleName = bold && italic ? "LObi" : bold ? "LOb" : italic ? "LOi" : "";
+  const esc = escapeXml(text);
+  return styleName ? `<text:span text:style-name="${styleName}">${esc}</text:span>` : esc;
+}
+
+/** Serialize a paragraph's inline content to ODF spans (mirrors inlineRuns). */
+function odfInline(node: Node, bold: boolean, italic: boolean): string {
+  let out = "";
+  node.childNodes.forEach((child) => {
+    if (child.nodeType === Node.TEXT_NODE) {
+      out += odfRun(child.textContent ?? "", bold, italic);
+      return;
+    }
+    if (child.nodeType !== Node.ELEMENT_NODE) return;
+    const tag = child.nodeName;
+    if (tag === "STRONG" || tag === "B") out += odfInline(child, true, italic);
+    else if (tag === "EM" || tag === "I") out += odfInline(child, bold, true);
+    else if (tag === "BR") out += "<text:line-break/>";
+    else out += odfInline(child, bold, italic);
+  });
+  return out;
+}
+
 const TOC_TITLES: Record<string, string> = {
   "": "Sumário",
   figures: "Lista de Figuras",
@@ -107,28 +178,44 @@ const TOC_TITLES: Record<string, string> = {
  *   same fix as print's `p:empty::before`, but baked because there is no
  *   CSS on this side).
  */
+/** A block-level raw marker consumed by the markdown export path (turndown →
+ *  fenced ```{=openxml|=opendocument}). rtf has no raw channel: returns null. */
+function rawBlock(doc: Document, format: DocFormat, xml: string): HTMLElement | null {
+  if (format === "rtf") return null;
+  const fmt = format === "docx" ? "openxml" : "opendocument";
+  const block = doc.createElement("div");
+  block.setAttribute("data-raw-block", xml);
+  block.setAttribute("data-raw-fmt", fmt);
+  return block;
+}
+
 export function prepareForPandoc(html: string, format: DocFormat): string {
   // Empty paragraphs may carry attributes (text-align on a centered blank
   // line), so the cheap gate has to be a regex, not includes("<p></p>").
-  // style= gates the alignment/indent baking (docx only, below).
+  // style= gates the alignment/indent baking (docx + odt, below).
+  const bakesStyle = format === "docx" || format === "odt";
   const needsWork =
     html.includes("data-page-break") ||
     html.includes("data-toc") ||
     /<p[^>]*><\/p>/.test(html) ||
-    (format === "docx" && html.includes("style="));
+    (bakesStyle && html.includes("style="));
   if (!needsWork) return html;
   const doc = new DOMParser().parseFromString(html, "text/html");
 
   doc.querySelectorAll("[data-page-break]").forEach((el) => {
-    if (format !== "docx") {
-      el.remove();
+    // docx: inline OOXML break run (goes inside pandoc's own paragraph).
+    // odt: a break-before-page paragraph (raw block). rtf: dropped.
+    if (format === "docx") {
+      const p = doc.createElement("p");
+      const marker = doc.createElement("span");
+      marker.setAttribute("data-ooxml", OOXML_PAGE_BREAK);
+      p.appendChild(marker);
+      el.replaceWith(p);
       return;
     }
-    const p = doc.createElement("p");
-    const marker = doc.createElement("span");
-    marker.setAttribute("data-ooxml", OOXML_PAGE_BREAK);
-    p.appendChild(marker);
-    el.replaceWith(p);
+    const block = format === "odt" ? rawBlock(doc, format, ODF_PAGE_BREAK) : null;
+    if (block) el.replaceWith(block);
+    else el.remove();
   });
 
   doc.querySelectorAll("nav[data-toc]").forEach((nav) => {
@@ -158,26 +245,32 @@ export function prepareForPandoc(html: string, format: DocFormat): string {
     p.textContent = "\u00a0";
   });
 
-  // Alignment / indent bake (docx only): pandoc's HTML reader drops inline CSS
-  // (text-align, margin-left, text-indent), so a centered ABNT cover or an
+  // Alignment / indent bake (docx + odt): pandoc's HTML reader drops inline
+  // CSS (text-align, margin-left, text-indent), so a centered ABNT cover or an
   // 8cm-indented "natureza do trabalho" arrives left-aligned. Rewrite those
-  // paragraphs as native OOXML (w:jc / w:ind) \u2014 the reference doc gives them
-  // Times 12pt, so together they reproduce the template. odt/rtf have no raw
-  // channel here; they keep the semantic-only output (documented limitation).
-  if (format === "docx") {
+  // paragraphs as native raw blocks \u2014 docx uses arbitrary-value w:jc/w:ind; odt
+  // maps to predefined named styles (fixed norm values). Both inherit Times
+  // from their reference doc. rtf has no raw channel (documented limitation).
+  if (bakesStyle) {
     doc.querySelectorAll("p[style]").forEach((p) => {
       const style = (p as HTMLElement).style;
       if (!hasBakeableStyle(style)) return;
       // Blank/NBSP-only spacer lines: leave as plain (NBSP) paragraphs —
       // centering an empty line does nothing, and keeping them as ordinary
-      // paragraphs preserves the vertical spacing without extra OOXML.
+      // paragraphs preserves the vertical spacing without extra raw XML.
       if (!(p.textContent ?? "").trim()) return; // trim() remove NBSP (WhiteSpace do ES)
-      const runs = inlineRuns(p, false, false);
-      if (!runs) return;
-      const xml = `<w:p>${paragraphProps(style)}${runs}</w:p>`;
-      const block = doc.createElement("div");
-      block.setAttribute("data-ooxml-block", xml);
-      p.replaceWith(block);
+      let xml: string;
+      if (format === "odt") {
+        const pStyle = odfParagraphStyle(style);
+        if (!pStyle) return; // arbitrary value with no matching named style
+        xml = `<text:p text:style-name="${pStyle}">${odfInline(p, false, false)}</text:p>`;
+      } else {
+        const runs = inlineRuns(p, false, false);
+        if (!runs) return;
+        xml = `<w:p>${paragraphProps(style)}${runs}</w:p>`;
+      }
+      const block = rawBlock(doc, format, xml);
+      if (block) p.replaceWith(block);
     });
   }
 
