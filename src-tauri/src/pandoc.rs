@@ -104,21 +104,30 @@ pub(crate) async fn export_via_pandoc(
     // the syntax, so always-on for the markdown reader is safe.
     let from_arg = if from == "markdown" { "markdown+raw_attribute" } else { from.as_str() };
 
-    // DOCX gets a reference doc whose Normal/heading styles are Times New Roman
-    // 12pt, so the whole document uses the ABNT font (pandoc's default is
-    // Calibri). The bytes are embedded in the binary and written to a temp file
-    // per export — pandoc needs a path, and this avoids resource-dir lookups.
-    // The alignment/indent of styled paragraphs comes through separately as raw
-    // OOXML (exportPrep.ts); together they reproduce the template in Word.
-    let reference_tmp = if to == "docx" {
-        let rt = std::env::temp_dir().join(format!("writer-reference-{}.docx", stamp));
-        let bytes: &[u8] = include_bytes!("../resources/reference-times.docx");
-        match tokio::fs::write(&rt, bytes).await {
-            Ok(_) => Some(rt),
-            Err(_) => None, // fall back to pandoc's default font rather than fail
+    // A reference doc carries the styles the exported markup relies on:
+    //  - docx: Normal/headings set to Times New Roman 12pt (pandoc's default is
+    //    Calibri); alignment/indent come through as raw OOXML (exportPrep.ts).
+    //  - odt: the named paragraph styles (LOc/LOj/LOml/LObreak…) that the raw
+    //    opendocument paragraphs reference for alignment, indent and page
+    //    breaks. ODT's default font is already Times, so this is only styles.
+    // The bytes are embedded in the binary and written to a temp file per
+    // export — pandoc needs a path, and this avoids resource-dir lookups.
+    let reference_tmp = {
+        let asset: Option<(&str, &[u8])> = match to.as_str() {
+            "docx" => Some(("docx", include_bytes!("../resources/reference-times.docx"))),
+            "odt" => Some(("odt", include_bytes!("../resources/reference-abnt.odt"))),
+            _ => None,
+        };
+        match asset {
+            Some((ext, bytes)) => {
+                let rt = std::env::temp_dir().join(format!("writer-reference-{}.{}", stamp, ext));
+                match tokio::fs::write(&rt, bytes).await {
+                    Ok(_) => Some(rt),
+                    Err(_) => None, // fall back to pandoc defaults rather than fail
+                }
+            }
+            None => None,
         }
-    } else {
-        None
     };
 
     let mut args: Vec<&str> = vec![tmp_str.as_str(), "-f", from_arg, "-t", to.as_str(), "-o", path.as_str()];

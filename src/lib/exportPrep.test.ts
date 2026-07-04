@@ -65,8 +65,9 @@ describe("prepareForPandoc", () => {
   it("docx: parágrafo centralizado vira OOXML nativo com w:jc center", () => {
     const html = '<p style="text-align: center"><span>NOME DA INSTITUIÇÃO</span></p>';
     const doc = parse(prepareForPandoc(html, "docx"));
-    const block = doc.querySelector("div[data-ooxml-block]");
-    const xml = block?.getAttribute("data-ooxml-block") ?? "";
+    const block = doc.querySelector("div[data-raw-block]");
+    const xml = block?.getAttribute("data-raw-block") ?? "";
+    expect(block?.getAttribute("data-raw-fmt")).toBe("openxml");
     expect(xml).toContain('<w:jc w:val="center"/>');
     expect(xml).toContain("NOME DA INSTITUIÇÃO");
     expect(xml.startsWith("<w:p>")).toBe(true);
@@ -76,8 +77,8 @@ describe("prepareForPandoc", () => {
     const html = '<p style="text-align: center"><strong>TÍTULO</strong> e <em>sub</em></p>';
     const xml =
       parse(prepareForPandoc(html, "docx"))
-        .querySelector("div[data-ooxml-block]")
-        ?.getAttribute("data-ooxml-block") ?? "";
+        .querySelector("div[data-raw-block]")
+        ?.getAttribute("data-raw-block") ?? "";
     expect(xml).toContain("<w:rPr><w:b/></w:rPr><w:t xml:space=\"preserve\">TÍTULO</w:t>");
     expect(xml).toContain("<w:rPr><w:i/></w:rPr><w:t xml:space=\"preserve\">sub</w:t>");
   });
@@ -86,8 +87,8 @@ describe("prepareForPandoc", () => {
     const html =
       '<p style="margin-left: 8cm">natureza</p><p style="text-indent: 1.25cm">corpo</p>';
     const blocks = Array.from(
-      parse(prepareForPandoc(html, "docx")).querySelectorAll("div[data-ooxml-block]")
-    ).map((b) => b.getAttribute("data-ooxml-block") ?? "");
+      parse(prepareForPandoc(html, "docx")).querySelectorAll("div[data-raw-block]")
+    ).map((b) => b.getAttribute("data-raw-block") ?? "");
     expect(blocks[0]).toContain(`<w:ind w:left="${8 * 567}"/>`);
     expect(blocks[1]).toContain(`<w:ind w:firstLine="${Math.round(1.25 * 567)}"/>`);
   });
@@ -96,17 +97,52 @@ describe("prepareForPandoc", () => {
     const html = '<p style="text-align: center"></p><p style="text-align: center">real</p>';
     const doc = parse(prepareForPandoc(html, "docx"));
     // O vazio virou NBSP simples; só o com texto virou bloco OOXML.
-    expect(doc.querySelectorAll("div[data-ooxml-block]").length).toBe(1);
+    expect(doc.querySelectorAll("div[data-raw-block]").length).toBe(1);
     expect(doc.querySelector("p")?.textContent).toBe(NBSP);
   });
 
-  it("odt/rtf: alinhamento NÃO é assado (sem canal cru; fica semântico)", () => {
+  it("odt: alinhamento vira <text:p> com estilo nomeado predefinido", () => {
+    const html =
+      '<p style="text-align: center">NOME</p>' +
+      '<p style="margin-left: 8cm">natureza</p>' +
+      '<p style="text-indent: 1.25cm; text-align: justify">corpo</p>';
+    const blocks = Array.from(
+      parse(prepareForPandoc(html, "odt")).querySelectorAll("div[data-raw-block]")
+    );
+    expect(blocks.every((b) => b.getAttribute("data-raw-fmt") === "opendocument")).toBe(true);
+    const xmls = blocks.map((b) => b.getAttribute("data-raw-block") ?? "");
+    expect(xmls[0]).toBe('<text:p text:style-name="LOc">NOME</text:p>');
+    expect(xmls[1]).toBe('<text:p text:style-name="LOml">natureza</text:p>');
+    expect(xmls[2]).toBe('<text:p text:style-name="LOjfi">corpo</text:p>');
+  });
+
+  it("odt: negrito vira <text:span> com estilo LOb", () => {
+    const html = '<p style="text-align: center"><strong>TÍTULO</strong></p>';
+    const xml =
+      parse(prepareForPandoc(html, "odt"))
+        .querySelector("div[data-raw-block]")
+        ?.getAttribute("data-raw-block") ?? "";
+    expect(xml).toContain('<text:span text:style-name="LOb">TÍTULO</text:span>');
+  });
+
+  it("odt: quebra de página vira parágrafo com estilo de quebra (LObreak)", () => {
+    const html = '<p>a</p><div data-page-break="true"></div><p>b</p>';
+    const block = parse(prepareForPandoc(html, "odt")).querySelector("div[data-raw-block]");
+    expect(block?.getAttribute("data-raw-block")).toBe('<text:p text:style-name="LObreak"/>');
+  });
+
+  it("odt: recuo arbitrário sem estilo casável fica parágrafo simples", () => {
+    const html = '<p style="text-indent: 3.7cm">corpo</p>';
+    const doc = parse(prepareForPandoc(html, "odt"));
+    expect(doc.querySelector("div[data-raw-block]")).toBeNull();
+    expect(doc.querySelector("p")?.textContent).toBe("corpo");
+  });
+
+  it("rtf: alinhamento NÃO é assado (sem canal cru; fica semântico)", () => {
     const html = '<p style="text-align: center">NOME</p>';
-    for (const fmt of ["odt", "rtf"] as const) {
-      const out = prepareForPandoc(html, fmt);
-      expect(out).not.toContain("data-ooxml-block");
-      expect(out).toContain("NOME");
-    }
+    const out = prepareForPandoc(html, "rtf");
+    expect(out).not.toContain("data-raw-block");
+    expect(out).toContain("NOME");
   });
 
   it("títulos de notas de rodapé e da bibliografia ficam fora do sumário", () => {

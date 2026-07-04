@@ -14,8 +14,8 @@ como trabalhar com cada formato de arquivo. Tudo funciona 100% offline.
 | **.md** (Markdown) | Total — é o formato-fonte | Formato de trabalho. Round-trip perfeito: citações `[@chave]` continuam vivas, layout de página viaja dentro do arquivo (comentário invisível na 1ª linha). Legível em qualquer editor de texto. |
 | **.html** | Total | Igual ao .md, mas com atributos `data-*` em vez de sintaxe pandoc. Bom para publicar na web. |
 | **.docx** (Word) | Alta (via pandoc) | Entrega e colaboração. Fonte **Times New Roman 12pt** em todo o documento, **centralização e recuos** (capa, folha de rosto, recuo de 1ª linha) preservados, **quebras de página** reais e linhas em branco mantidas. Legendas e referências cruzadas viram **campos SEQ/REF nativos** (o Word renumera com F9), notas de rodapé/equações/revisão viram os recursos nativos. Citações viram texto formatado (mão única — quem edita no Word não as reativa). |
-| **.odt** (LibreOffice) | Boa | Como o .docx em estrutura, quebras e linhas em branco, mas **fonte/alinhamento/recuo não são preservados** (o ODF não tem o mesmo canal cru do Word) e legendas/crossrefs saem como texto fixo. Para fidelidade de norma, prefira .docx ou PDF. |
-| **.rtf** | Boa | Compatibilidade com editores antigos; mesmas ressalvas do .odt. |
+| **.odt** (LibreOffice) | Alta | Fonte **Times New Roman** (padrão do formato), **centralização, recuos da norma** (1ª linha 1,25 cm; natureza 8 cm), **quebras de página** e linhas em branco preservados via estilos nomeados. Recuo em valor fora do conjunto da norma não viaja (o ODF exige um estilo por valor). Legendas/crossrefs saem como texto fixo (campos ODF ainda não implementados). |
+| **.rtf** | Boa | Compatibilidade com editores antigos: estrutura, quebras e linhas em branco, mas **sem fonte/alinhamento/recuo** (o RTF não tem canal para isso aqui). Para norma, prefira .docx, .odt ou PDF. |
 | **PDF** | WYSIWYG | Só saída (botão **PDF** na barra). O que você vê nas páginas do editor é o que sai no PDF — a contagem e as quebras de página são as mesmas, por construção. |
 
 Ressalvas conhecidas:
