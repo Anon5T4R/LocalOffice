@@ -9,6 +9,7 @@ import { prepareForPandoc } from "./exportPrep";
 import { bakeReviewForDocx, reviewFromPandoc } from "./reviewExport";
 import { loadSettings } from "./settings";
 import { settingsLayout, type DocLayout } from "../editor/DocLayout";
+import { t } from "./i18n";
 
 /** Whether the editor HTML carries footnotes (drives the DOCX/ODT export path). */
 function hasFootnotes(html: string): boolean {
@@ -87,10 +88,7 @@ function resolveHeadingNumbers(
   layout: DocLayout | null
 ): { html: string; layout: DocLayout | null } {
   if (stripUnmarked && detectManualNumberingSequence(html)) {
-    const convert = window.confirm(
-      "Este documento tem títulos numerados manualmente, no mesmo padrão da numeração automática.\n" +
-        "Converter para numeração automática? (remove os números digitados — o editor passa a gerá-los)"
-    );
+    const convert = window.confirm(t("file.confirmHeadingNumbers"));
     if (convert) return { html: stripBakedHeadingNumbers(html, true), layout };
     // Keep the typed numbers as real content: turn automatic numbering off
     // for THIS document only — the app-wide setting is untouched, so other
@@ -195,10 +193,10 @@ export async function openDocument(): Promise<DocFile | null> {
     multiple: false,
     filters: [
       {
-        name: "Documentos",
+        name: t("file.filterDocuments"),
         extensions: ["md", "markdown", "txt", "docx", "odt", "rtf", "html", "htm"],
       },
-      { name: "Todos os arquivos", extensions: ["*"] },
+      { name: t("file.filterAll"), extensions: ["*"] },
     ],
   });
   if (!selected || Array.isArray(selected)) return null;
@@ -211,17 +209,17 @@ export async function openDocument(): Promise<DocFile | null> {
 export async function saveDocumentAs(
   html: string,
   layout: DocLayout | null,
-  suggestedName = "sem-titulo.md"
+  suggestedName = t("file.untitledName")
 ): Promise<DocFile | null> {
   const path = await saveDialog({
     defaultPath: suggestedName,
     filters: [
-      { name: "Markdown", extensions: ["md"] },
-      { name: "Word (DOCX)", extensions: ["docx"] },
-      { name: "OpenDocument (ODT)", extensions: ["odt"] },
-      { name: "Rich Text (RTF)", extensions: ["rtf"] },
-      { name: "HTML", extensions: ["html"] },
-      { name: "Texto", extensions: ["txt"] },
+      { name: t("file.filterMarkdown"), extensions: ["md"] },
+      { name: t("file.filterDocx"), extensions: ["docx"] },
+      { name: t("file.filterOdt"), extensions: ["odt"] },
+      { name: t("file.filterRtf"), extensions: ["rtf"] },
+      { name: t("file.filterHtml"), extensions: ["html"] },
+      { name: t("file.filterText"), extensions: ["txt"] },
     ],
   });
   if (!path) return null;

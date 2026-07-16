@@ -4,6 +4,7 @@ import type { DocFile, DocFormat } from "../lib/document";
 import type { DocLayout } from "../editor/DocLayout";
 import { Tab, EMPTY_DOC, newTab, tabTitle } from "../lib/tabs";
 import { useLatest } from "./useLatest";
+import { t as tr } from "../lib/i18n";
 
 /** The slice of a tab that a disk write needs (filePath guaranteed present). */
 export interface SavableTab {
@@ -140,7 +141,7 @@ export function useDocumentTabs(editorRef: RefObject<Editor | null>, opts: Docum
     const editor = editorRef.current;
     const t = tabsRef.current.find((x) => x.id === id);
     if (!t || !editor) return;
-    if (t.dirty && !window.confirm(`"${tabTitle(t)}" tem alterações não salvas. Fechar mesmo assim?`)) return;
+    if (t.dirty && !window.confirm(tr("tabs.closeConfirm", { title: tabTitle(t) }))) return;
 
     optsRef.current.onCloseTab?.(id);
     const idx = tabsRef.current.findIndex((x) => x.id === id);

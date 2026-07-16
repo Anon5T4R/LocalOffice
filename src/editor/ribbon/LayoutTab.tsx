@@ -3,12 +3,13 @@ import { useEditorState } from "@tiptap/react";
 import { useEditorInstance } from "../../state/EditorContext";
 import { useSettings } from "../../state/SettingsContext";
 import type { PageFormat } from "../../lib/settings";
-import { TEMPLATES, type DocTemplate } from "../../lib/templates";
+import { TEMPLATES, templateName, templateDesc, type DocTemplate } from "../../lib/templates";
 import { effectiveLayout, patchDocLayout } from "../DocLayout";
 import { StylesModal } from "../StylesModal";
 import { HeaderFooterModal } from "../HeaderFooterModal";
 import { Btn } from "./Btn";
 import { MARGIN_PRESETS, currentMarginPreset } from "./shared";
+import { t as tr } from "../../lib/i18n";
 
 /** "Layout": modelos, formato de página, margens, espaçamentos, numeração. */
 export function LayoutTab({ onApplyTemplate }: { onApplyTemplate: (tmpl: DocTemplate) => void }) {
@@ -40,16 +41,16 @@ export function LayoutTab({ onApplyTemplate }: { onApplyTemplate: (tmpl: DocTemp
           className="tb-btn tb-select"
           defaultValue=""
           onChange={(e) => {
-            const t = TEMPLATES[e.target.value];
-            if (t) onApplyTemplate(t);
+            const tmpl = TEMPLATES[e.target.value];
+            if (tmpl) onApplyTemplate(tmpl);
             e.target.value = "";
           }}
-          title="Modelo de documento pré-configurado"
+          title={tr("layout.templateTitle")}
           style={{ minWidth: 120 }}
         >
-          <option value="">Modelos ▾</option>
-          {Object.entries(TEMPLATES).map(([key, t]) => (
-            <option key={key} value={key} title={t.description}>{t.name}</option>
+          <option value="">{tr("layout.templatesMenu")}</option>
+          {Object.keys(TEMPLATES).map((key) => (
+            <option key={key} value={key} title={templateDesc(key)}>{templateName(key)}</option>
           ))}
         </select>
       </div>
@@ -60,13 +61,13 @@ export function LayoutTab({ onApplyTemplate }: { onApplyTemplate: (tmpl: DocTemp
           className="tb-btn tb-select"
           value={pageFormat}
           onChange={(e) => patchDocLayout(editor, settings, { pageFormat: e.target.value as PageFormat })}
-          title="Formato de página"
+          title={tr("layout.pageFormatTitle")}
         >
-          <option value="classic">Clássica (infinito)</option>
-          <option value="a4">A4 (210×297mm)</option>
-          <option value="a5">A5 (148×210mm)</option>
-          <option value="letter">Carta (216×279mm)</option>
-          <option value="a3">A3 (297×420mm)</option>
+          <option value="classic">{tr("layout.fmtClassic")}</option>
+          <option value="a4">{tr("layout.fmtA4")}</option>
+          <option value="a5">{tr("layout.fmtA5")}</option>
+          <option value="letter">{tr("layout.fmtLetter")}</option>
+          <option value="a3">{tr("layout.fmtA3")}</option>
         </select>
       </div>
       <div className="tb-sep" />
@@ -79,13 +80,13 @@ export function LayoutTab({ onApplyTemplate }: { onApplyTemplate: (tmpl: DocTemp
             const preset = MARGIN_PRESETS[e.target.value];
             if (preset) patchDocLayout(editor, settings, { pageMargins: preset });
           }}
-          title="Margens da página"
+          title={tr("layout.marginsTitle")}
         >
-          <option value="normal">Margens normais</option>
-          <option value="narrow">Estreitas</option>
-          <option value="moderate">Moderadas</option>
-          <option value="wide">Amplas</option>
-          <option value="personalizado" disabled>Personalizado</option>
+          <option value="normal">{tr("layout.marginNormal")}</option>
+          <option value="narrow">{tr("layout.marginNarrow")}</option>
+          <option value="moderate">{tr("layout.marginModerate")}</option>
+          <option value="wide">{tr("layout.marginWide")}</option>
+          <option value="personalizado" disabled>{tr("layout.marginCustom")}</option>
         </select>
       </div>
       <div className="tb-sep" />
@@ -97,17 +98,17 @@ export function LayoutTab({ onApplyTemplate }: { onApplyTemplate: (tmpl: DocTemp
           onChange={(e) => {
             if (e.target.value) chain().setLineHeight(e.target.value).run();
           }}
-          title="Espaçamento entre linhas"
+          title={tr("layout.lineHeightTitle")}
         >
-          <option value="">Esp. linhas</option>
-          <option value="1.0">Simples</option>
+          <option value="">{tr("layout.lineHeightMenu")}</option>
+          <option value="1.0">{tr("layout.lineSingle")}</option>
           <option value="1.15">1.15</option>
           <option value="1.5">1.5</option>
-          <option value="2.0">Duplo</option>
+          <option value="2.0">{tr("layout.lineDouble")}</option>
           <option value="2.5">2.5</option>
-          <option value="3.0">Triplo</option>
+          <option value="3.0">{tr("layout.lineTriple")}</option>
         </select>
-        <Btn onClick={() => chain().unsetLineHeight().run()} title="Espaçamento padrão" disabled={!s.lineHeight}>↺</Btn>
+        <Btn onClick={() => chain().unsetLineHeight().run()} title={tr("layout.lineHeightDefault")} disabled={!s.lineHeight}>↺</Btn>
       </div>
       <div className="tb-sep" />
 
@@ -119,10 +120,10 @@ export function LayoutTab({ onApplyTemplate }: { onApplyTemplate: (tmpl: DocTemp
             if (e.target.value) chain().setLetterSpacing(e.target.value + "px").run();
             else chain().unsetLetterSpacing().run();
           }}
-          title="Espaçamento entre letras"
+          title={tr("layout.letterSpacingTitle")}
         >
-          <option value="">Esp. letras</option>
-          <option value="0">Normal</option>
+          <option value="">{tr("layout.letterSpacingMenu")}</option>
+          <option value="0">{tr("layout.letterNormal")}</option>
           <option value="0.5">0.5px</option>
           <option value="1">1px</option>
           <option value="1.5">1.5px</option>
@@ -130,7 +131,7 @@ export function LayoutTab({ onApplyTemplate }: { onApplyTemplate: (tmpl: DocTemp
           <option value="3">3px</option>
           <option value="4">4px</option>
         </select>
-        <Btn onClick={() => chain().unsetLetterSpacing().run()} title="Espaçamento padrão" disabled={!s.letterSpacing}>↺</Btn>
+        <Btn onClick={() => chain().unsetLetterSpacing().run()} title={tr("layout.letterSpacingDefault")} disabled={!s.letterSpacing}>↺</Btn>
       </div>
       <div className="tb-sep" />
 
@@ -139,11 +140,11 @@ export function LayoutTab({ onApplyTemplate }: { onApplyTemplate: (tmpl: DocTemp
           className="tb-btn tb-select"
           value={s.textIndent}
           onChange={(e) => chain().setTextIndent(e.target.value || null).run()}
-          title="Recuo da primeira linha do parágrafo"
+          title={tr("layout.indentTitle")}
         >
-          <option value="">Recuo 1ª linha</option>
-          <option value="1.25cm">1,25 cm (ABNT)</option>
-          <option value="2cm">2 cm</option>
+          <option value="">{tr("layout.indentMenu")}</option>
+          <option value="1.25cm">{tr("layout.indentABNT")}</option>
+          <option value="2cm">{tr("layout.indent2")}</option>
         </select>
       </div>
       <div className="tb-sep" />
@@ -152,10 +153,10 @@ export function LayoutTab({ onApplyTemplate }: { onApplyTemplate: (tmpl: DocTemp
         <Btn
           onClick={() => patchDocLayout(editor, settings, { numberHeadings: !numberHeadings })}
           active={numberHeadings}
-          title="Numerar títulos automaticamente (1, 1.1, 1.1.1…)"
+          title={tr("layout.numberHeadings")}
           wide
         >
-          1.2.3 Títulos
+          {tr("layout.numberHeadingsLabel")}
         </Btn>
       </div>
       <div className="tb-sep" />
@@ -163,18 +164,18 @@ export function LayoutTab({ onApplyTemplate }: { onApplyTemplate: (tmpl: DocTemp
       <div className="tb-group">
         <Btn
           onClick={() => setShowHeaderFooter(true)}
-          title="Cabeçalho e rodapé da página (também: duplo clique na margem da página)"
+          title={tr("layout.headerFooter")}
           wide
         >
-          ▤ Cab./Rodapé
+          {tr("layout.headerFooterLabel")}
         </Btn>
         <Btn
           onClick={() => setShowStyles(true)}
           active={!!styles && Object.keys(styles).length > 0}
-          title="Estilos do documento (fonte, tamanho, entrelinha, alinhamento por tipo de bloco)"
+          title={tr("layout.styles")}
           wide
         >
-          ¶A Estilos
+          {tr("layout.stylesLabel")}
         </Btn>
       </div>
       {showStyles && <StylesModal onClose={() => setShowStyles(false)} />}

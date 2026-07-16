@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { CiteEngine, CitationData, CslItem } from "./citations";
+import { t } from "./i18n";
 
 /**
  * App-wide citation state. Deliberately tiny and synchronous: NodeViews and
@@ -46,7 +47,7 @@ export function itemSummary(item: CslItem): { authors: string; year: string } {
     .map((a) => a.family || a.literal || a.given || "")
     .filter(Boolean);
   const authors =
-    names.length === 0 ? "(sem autor)" : names.length > 2 ? `${names[0]} et al.` : names.join(" & ");
+    names.length === 0 ? t("citation.noAuthor") : names.length > 2 ? `${names[0]} et al.` : names.join(" & ");
   const year = String(item.issued?.["date-parts"]?.[0]?.[0] ?? "s.d.");
   return { authors, year };
 }

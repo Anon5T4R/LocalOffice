@@ -5,15 +5,27 @@ import { useSettings } from "../state/SettingsContext";
 import { effectiveLayout, patchDocLayout } from "./DocLayout";
 import { STYLE_TARGETS, type BlockStyle, type DocStyles } from "../lib/docStyles";
 import { ptToPx, pxToPt } from "../lib/fontUnits";
+import { t, type MessageKey } from "../lib/i18n";
 
 const FONTS = ["", "Sans-serif", "Serif", "Monospace", "Arial", "Times New Roman", "Courier New", "Georgia", "Verdana"];
-const ALIGNS: { value: BlockStyle["align"] | ""; label: string }[] = [
-  { value: "", label: "—" },
-  { value: "left", label: "Esquerda" },
-  { value: "center", label: "Centro" },
-  { value: "right", label: "Direita" },
-  { value: "justify", label: "Justificado" },
+// Built at render (not a module const) so the labels follow the UI language.
+const alignOptions = (): { value: BlockStyle["align"] | ""; label: string }[] => [
+  { value: "", label: t("styles.alignNone") },
+  { value: "left", label: t("styles.alignLeft") },
+  { value: "center", label: t("styles.alignCenter") },
+  { value: "right", label: t("styles.alignRight") },
+  { value: "justify", label: t("styles.alignJustify") },
 ];
+
+const STYLE_TARGET_LABEL: Record<string, MessageKey> = {
+  paragraph: "styles.target.paragraph",
+  h1: "styles.target.h1",
+  h2: "styles.target.h2",
+  h3: "styles.target.h3",
+  blockquote: "styles.target.blockquote",
+  caption: "styles.target.caption",
+  generated: "styles.target.generated",
+};
 
 /**
  * Named-styles editor: one definition per block type, applied to every block
@@ -57,34 +69,31 @@ export function StylesModal({ onClose }: { onClose: () => void }) {
   const num = (v: number | undefined) => (v === undefined ? "" : String(v));
 
   return (
-    <Modal title="Estilos do documento" onClose={onClose} boxStyle={{ width: 680, maxWidth: "94vw" }}>
+    <Modal title={t("styles.title")} onClose={onClose} boxStyle={{ width: 680, maxWidth: "94vw" }}>
       <div className="modal-body">
-        <p className="styles-hint">
-          Cada estilo vale para todos os blocos do tipo, viaja com o documento e vale igual no PDF.
-          Campo vazio = padrão do app.
-        </p>
+        <p className="styles-hint">{t("styles.hint")}</p>
         <table className="styles-grid">
           <thead>
             <tr>
-              <th>Estilo</th>
-              <th>Fonte</th>
-              <th>Tam. (pt)</th>
-              <th>Entrelinha</th>
-              <th>Alinh.</th>
-              <th>Antes (em)</th>
-              <th title="Recuo da primeira linha, em cm">Recuo (cm)</th>
+              <th>{t("styles.colStyle")}</th>
+              <th>{t("styles.colFont")}</th>
+              <th>{t("styles.colSize")}</th>
+              <th>{t("styles.colLineHeight")}</th>
+              <th>{t("styles.colAlign")}</th>
+              <th>{t("styles.colBefore")}</th>
+              <th title={t("styles.indentTitle")}>{t("styles.colIndent")}</th>
             </tr>
           </thead>
           <tbody>
-            {STYLE_TARGETS.map(({ key, label }) => {
+            {STYLE_TARGETS.map(({ key }) => {
               const s = draft[key] ?? {};
               return (
                 <tr key={key}>
-                  <td>{label}</td>
+                  <td>{t(STYLE_TARGET_LABEL[key])}</td>
                   <td>
                     <select value={s.fontFamily ?? ""} onChange={(e) => patch(key, "fontFamily", e.target.value)}>
                       {FONTS.map((f) => (
-                        <option key={f} value={f}>{f || "(padrão)"}</option>
+                        <option key={f} value={f}>{f || t("styles.fontDefault")}</option>
                       ))}
                     </select>
                   </td>
@@ -92,7 +101,7 @@ export function StylesModal({ onClose }: { onClose: () => void }) {
                   <td><input type="number" step={0.05} min={0.8} max={4} value={num(s.lineHeight)} onChange={(e) => patch(key, "lineHeight", e.target.value)} /></td>
                   <td>
                     <select value={s.align ?? ""} onChange={(e) => patch(key, "align", e.target.value)}>
-                      {ALIGNS.map((a) => (
+                      {alignOptions().map((a) => (
                         <option key={a.label} value={a.value ?? ""}>{a.label}</option>
                       ))}
                     </select>
@@ -111,12 +120,12 @@ export function StylesModal({ onClose }: { onClose: () => void }) {
           </tbody>
         </table>
         <div className="styles-actions">
-          <button className="tb-btn" onClick={() => setDraft({})} title="Voltar tudo ao padrão do app">
-            Limpar tudo
+          <button className="tb-btn" onClick={() => setDraft({})} title={t("styles.clearAllTitle")}>
+            {t("styles.clearAll")}
           </button>
           <span style={{ flex: 1 }} />
-          <button className="tb-btn" onClick={onClose}>Cancelar</button>
-          <button className="tb-btn tb-primary" onClick={apply}>Aplicar</button>
+          <button className="tb-btn" onClick={onClose}>{t("common.cancel")}</button>
+          <button className="tb-btn tb-primary" onClick={apply}>{t("common.apply")}</button>
         </div>
       </div>
     </Modal>

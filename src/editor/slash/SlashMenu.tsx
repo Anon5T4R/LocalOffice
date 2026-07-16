@@ -1,5 +1,6 @@
 import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
 import type { SlashItem } from "./items";
+import { t } from "../../lib/i18n";
 
 export interface SlashMenuRef {
   onKeyDown: (x: { event: KeyboardEvent }) => boolean;
@@ -40,7 +41,7 @@ export const SlashMenu = forwardRef<SlashMenuRef, SlashMenuProps>((props, ref) =
   }));
 
   if (!props.items.length) {
-    return <div className="slash-menu slash-empty">Nenhum comando</div>;
+    return <div className="slash-menu slash-empty">{t("slash.empty")}</div>;
   }
 
   return (

@@ -1,4 +1,5 @@
 import { Tab, tabTitle } from "../lib/tabs";
+import { t as tr } from "../lib/i18n";
 
 interface TabStripProps {
   tabs: Tab[];
@@ -22,7 +23,7 @@ export function TabStrip({ tabs, activeId, onSelect, onClose, onNew }: TabStripP
               onClose(t.id);
             }
           }}
-          title={t.filePath ?? "sem título"}
+          title={t.filePath ?? tr("common.untitled")}
         >
           <span className="tab-title">
             {t.dirty ? "● " : ""}
@@ -34,13 +35,13 @@ export function TabStrip({ tabs, activeId, onSelect, onClose, onNew }: TabStripP
               e.stopPropagation();
               onClose(t.id);
             }}
-            title="Fechar aba"
+            title={tr("tab.close")}
           >
             ✕
           </button>
         </div>
       ))}
-      <button className="tab-new" onClick={onNew} title="Nova aba (Ctrl+T)">
+      <button className="tab-new" onClick={onNew} title={tr("tab.new")}>
         +
       </button>
     </div>

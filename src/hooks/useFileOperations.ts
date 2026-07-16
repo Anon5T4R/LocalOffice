@@ -8,6 +8,7 @@ import { tabTitle, type Tab } from "../lib/tabs";
 import { chromeRange, effectiveLayout, type DocLayout } from "../editor/DocLayout";
 import { getBreakOffsets, getPageCount } from "../editor/PageBreaks";
 import type { SavableTab } from "./useDocumentTabs";
+import { t } from "../lib/i18n";
 
 interface FileOperationsDeps {
   editorRef: RefObject<Editor | null>;
@@ -40,7 +41,7 @@ export function useFileOperations({
       const doc = await openDocument();
       if (doc) openDocFile(doc);
     } catch (e) {
-      window.alert(`Não foi possível abrir:\n${e}`);
+      window.alert(t("file.openError", { e: String(e) }));
     }
   }, [openDocFile]);
 
@@ -49,7 +50,7 @@ export function useFileOperations({
       try {
         openDocFile(await openDocumentPath(path));
       } catch (e) {
-        window.alert(`Não foi possível abrir:\n${e}`);
+        window.alert(t("file.openError", { e: String(e) }));
       }
     },
     [openDocFile]
@@ -59,7 +60,7 @@ export function useFileOperations({
     const editor = editorRef.current;
     if (!editor) return;
     const at = tabsRef.current.find((t) => t.id === activeIdRef.current);
-    const suggested = at?.filePath ? baseName(at.filePath) : "sem-titulo.md";
+    const suggested = at?.filePath ? baseName(at.filePath) : t("file.untitledName");
     try {
       const layout = effectiveLayout(editor.state.doc, settings);
       const doc = await saveDocumentAs(editor.getHTML(), layout, suggested);
@@ -70,7 +71,7 @@ export function useFileOperations({
         cancelAutosave();
       }
     } catch (e) {
-      window.alert(`Não foi possível salvar:\n${e}`);
+      window.alert(t("file.saveError", { e: String(e) }));
     }
   }, [editorRef, tabsRef, activeIdRef, setTabs, remember, cancelAutosave, settings]);
 
@@ -89,7 +90,7 @@ export function useFileOperations({
       remember(at.filePath);
       cancelAutosave();
     } catch (e) {
-      window.alert(`Não foi possível salvar:\n${e}`);
+      window.alert(t("file.saveError", { e: String(e) }));
     }
   }, [editorRef, tabsRef, activeIdRef, handleSaveAs, queueSave, remember, cancelAutosave, settings]);
 
@@ -131,7 +132,7 @@ export function useFileOperations({
     setPrintJob({
       html: editor.getHTML(),
       options: {
-        title: at ? tabTitle(at) : "Documento",
+        title: at ? tabTitle(at) : t("file.docTitle"),
         pageFormat: layout.pageFormat,
         margins: layout.pageMargins,
         header: layout.pageHeader,

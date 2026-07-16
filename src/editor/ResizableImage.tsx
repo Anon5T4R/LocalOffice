@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import Image from "@tiptap/extension-image";
 import { NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
+import { t } from "../lib/i18n";
 
 type Align = "left" | "center" | "right" | null;
 
@@ -44,7 +45,7 @@ function ImageView({ node, updateAttributes, selected }: NodeViewProps) {
   };
 
   const editAlt = () => {
-    const alt = window.prompt("Texto alternativo (acessibilidade):", node.attrs.alt || "");
+    const alt = window.prompt(t("image.altPrompt"), node.attrs.alt || "");
     if (alt !== null) updateAttributes({ alt });
   };
 
@@ -69,12 +70,12 @@ function ImageView({ node, updateAttributes, selected }: NodeViewProps) {
       {selected && (
         <>
           <div className="image-toolbar" contentEditable={false}>
-            <button onClick={() => setAlign("left")} className={node.attrs.align === "left" ? "is-active" : ""} title="Flutuar à esquerda (texto contorna)">⬅</button>
-            <button onClick={() => setAlign("center")} className={node.attrs.align === "center" ? "is-active" : ""} title="Centralizar">⬌</button>
-            <button onClick={() => setAlign("right")} className={node.attrs.align === "right" ? "is-active" : ""} title="Flutuar à direita (texto contorna)">➡</button>
-            <button onClick={editAlt} title="Texto alternativo">alt</button>
+            <button onClick={() => setAlign("left")} className={node.attrs.align === "left" ? "is-active" : ""} title={t("image.floatLeft")}>⬅</button>
+            <button onClick={() => setAlign("center")} className={node.attrs.align === "center" ? "is-active" : ""} title={t("image.center")}>⬌</button>
+            <button onClick={() => setAlign("right")} className={node.attrs.align === "right" ? "is-active" : ""} title={t("image.floatRight")}>➡</button>
+            <button onClick={editAlt} title={t("image.alt")}>alt</button>
             {node.attrs.width && (
-              <button onClick={() => updateAttributes({ width: null })} title="Tamanho original">↺</button>
+              <button onClick={() => updateAttributes({ width: null })} title={t("image.originalSize")}>↺</button>
             )}
           </div>
           <span className="image-resize-handle" contentEditable={false} onPointerDown={startResize} />

@@ -8,6 +8,7 @@ import { chromeRange, effectiveLayout } from "./DocLayout";
 import { loadSettings } from "../lib/settings";
 import type { HeaderFooterSpec, PageMargins } from "../lib/settings";
 import { printableHeightPx } from "../lib/pageGeometry";
+import { t } from "../lib/i18n";
 
 interface PageBreakState {
   decorations: DecorationSet;
@@ -227,7 +228,7 @@ function chromeRow(kind: "header" | "footer", spec: HeaderFooterSpec, page: numb
   if (slots.every((s) => !s.trim())) return null;
   const row = document.createElement("div");
   row.className = `page-chrome page-chrome-${kind}`;
-  row.title = kind === "header" ? "Cabeçalho — duplo clique para editar" : "Rodapé — duplo clique para editar";
+  row.title = kind === "header" ? t("page.headerEdit") : t("page.footerEdit");
   for (const text of slots) {
     const slot = document.createElement("span");
     slot.className = "page-chrome-slot";
@@ -269,7 +270,7 @@ function betweenGap(offset: number, pageAbove: number, pageBelow: number, ctx: C
       sheetGap.style.height = `${SHEET_GAP_PX}px`;
       const label = document.createElement("span");
       label.className = "page-gap-label";
-      label.textContent = `Página ${pageBelow}`;
+      label.textContent = t("page.label", { n: pageBelow });
       sheetGap.appendChild(label);
       root.appendChild(sheetGap);
       root.appendChild(marginBand(ctx.margins.top, "top", chromeRow("header", ctx.header, pageBelow, ctx)));

@@ -4,6 +4,7 @@ import type { Node as PMNode } from "@tiptap/pm/model";
 import { revealPos } from "./reveal";
 import { useEditorInstance } from "../state/EditorContext";
 import { arrayOfObjectsEqual } from "../lib/equality";
+import { t } from "../lib/i18n";
 
 interface Heading {
   level: number;
@@ -74,7 +75,7 @@ export function ChaptersPanel({ onClose }: { onClose: () => void }) {
       editor.state.doc.descendants((node, pos) => {
         if (node.type.name === "footnotes") return false;
         if (node.type.name === "heading") {
-          out.push({ level: node.attrs.level, text: node.textContent || "(sem título)", pos });
+          out.push({ level: node.attrs.level, text: node.textContent || t("chapters.untitled"), pos });
         }
         return true;
       });
@@ -96,12 +97,12 @@ export function ChaptersPanel({ onClose }: { onClose: () => void }) {
   return (
     <aside className="chapters-panel">
       <div className="panel-header">
-        <strong>Capítulos</strong>
+        <strong>{t("chapters.title")}</strong>
         <span className="ai-spacer" />
-        <button className="tb-btn" onClick={onClose} title="Fechar painel">✕</button>
+        <button className="tb-btn" onClick={onClose} title={t("common.closePanel")}>✕</button>
       </div>
       <div className="chapters-list">
-        {items.length === 0 && <div className="ai-empty">Sem títulos ainda.<br />Use H1–H3 para criar capítulos.</div>}
+        {items.length === 0 && <div className="ai-empty">{t("chapters.empty1")}<br />{t("chapters.empty2")}</div>}
         {items.map((h, i) => (
           <button
             key={i}
@@ -111,7 +112,7 @@ export function ChaptersPanel({ onClose }: { onClose: () => void }) {
               (dragIndex === i ? " dragging" : "")
             }
             onClick={() => go(h.pos)}
-            title={`${h.text} — arraste para reordenar a seção`}
+            title={t("chapters.reorderTitle", { text: h.text })}
             draggable
             onDragStart={() => setDragIndex(i)}
             onDragEnd={() => { setDragIndex(null); setOverIndex(null); }}
@@ -127,7 +128,7 @@ export function ChaptersPanel({ onClose }: { onClose: () => void }) {
             onDragOver={(e) => { e.preventDefault(); setOverIndex("end"); }}
             onDrop={(e) => { e.preventDefault(); drop("end"); }}
           >
-            ⤓ mover para o fim
+            {t("chapters.moveToEnd")}
           </div>
         )}
       </div>

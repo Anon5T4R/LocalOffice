@@ -2,6 +2,7 @@ import { useSyncExternalStore } from "react";
 import { Node, mergeAttributes } from "@tiptap/core";
 import { NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
 import * as citationStore from "../lib/citationStore";
+import { t } from "../lib/i18n";
 
 declare module "@tiptap/core" {
   interface Commands<ReturnType> {
@@ -26,12 +27,10 @@ function BibliographyView(_props: NodeViewProps) {
     <NodeViewWrapper className="bibliography-block" contentEditable={false}>
       <div className="bibliography-header">Referências</div>
       {!engine && (
-        <div className="bibliography-empty">
-          Configure um arquivo .bib ou CSL-JSON em ⚙ Configurações para gerar as referências.
-        </div>
+        <div className="bibliography-empty">{t("biblio.notConfigured")}</div>
       )}
       {engine && entries.length === 0 && (
-        <div className="bibliography-empty">Nenhuma obra citada ainda — digite "[@" para citar.</div>
+        <div className="bibliography-empty">{t("biblio.noWorks")}</div>
       )}
       {/* citeproc output is generated locally from the user's own bibliography */}
       <div dangerouslySetInnerHTML={{ __html: entries.join("\n") }} />

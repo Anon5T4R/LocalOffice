@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Node, mergeAttributes, nodeInputRule } from "@tiptap/core";
 import { NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
+import { t } from "../lib/i18n";
 
 declare module "@tiptap/core" {
   interface Commands<ReturnType> {
@@ -32,7 +33,7 @@ function MathView({ node, updateAttributes, editor }: NodeViewProps) {
 
   const edit = () => {
     if (!editor.isEditable) return;
-    const next = window.prompt("Fórmula (LaTeX):", latex);
+    const next = window.prompt(t("math.promptEdit"), latex);
     if (next !== null && next.trim()) updateAttributes({ latex: next.trim() });
   };
 
@@ -40,7 +41,7 @@ function MathView({ node, updateAttributes, editor }: NodeViewProps) {
     <NodeViewWrapper
       as="span"
       className="math-inline"
-      title="Equação — duplo clique para editar"
+      title={t("math.editTitle")}
       onDoubleClick={edit}
     >
       {html ? (
@@ -94,7 +95,7 @@ export const MathInline = Node.create({
       insertMath:
         (latex?: string) =>
         ({ chain }) => {
-          const source = latex ?? window.prompt("Fórmula (LaTeX):", "") ?? "";
+          const source = latex ?? window.prompt(t("math.promptEdit"), "") ?? "";
           if (!source.trim()) return false;
           return chain()
             .insertContent({ type: this.name, attrs: { latex: source.trim() } })

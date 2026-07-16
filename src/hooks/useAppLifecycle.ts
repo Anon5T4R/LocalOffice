@@ -9,6 +9,7 @@ import { newTab, tabTitle, type Tab } from "../lib/tabs";
 import type { DocLayout } from "../editor/DocLayout";
 import type { SavableTab } from "./useDocumentTabs";
 import { useTauriEvent } from "./useTauriEvent";
+import { t } from "../lib/i18n";
 
 interface AppLifecycleDeps {
   editor: Editor | null;
@@ -66,10 +67,10 @@ export function useAppLifecycle({
     if (withoutPath.length > 0 || failed.length > 0) {
       try {
         const parts: string[] = [];
-        if (failed.length) parts.push(`${failed.length} documento(s) não puderam ser salvos automaticamente (${failed.join(", ")})`);
-        if (withoutPath.length) parts.push(`${withoutPath.length} documento(s) nunca foram salvos em um arquivo`);
-        const ok = await ask(`${parts.join("; ")}.\nSair mesmo assim?`, {
-          title: "Sair do LocalOffice",
+        if (failed.length) parts.push(t("lifecycle.failedSave", { n: failed.length, names: failed.join(", ") }));
+        if (withoutPath.length) parts.push(t("lifecycle.neverSaved", { n: withoutPath.length }));
+        const ok = await ask(`${parts.join("; ")}${t("lifecycle.anywaySuffix")}`, {
+          title: t("lifecycle.exitTitle"),
           kind: "warning",
         });
         if (!ok) return;
@@ -137,9 +138,7 @@ export function useAppLifecycle({
           if (snap) await clearRescue(); // empty snapshot, nothing to offer
           return;
         }
-        const wantsRestore = window.confirm(
-          "O LocalOffice fechou de forma inesperada com documentos abertos.\nRestaurar a sessão anterior?"
-        );
+        const wantsRestore = window.confirm(t("lifecycle.rescueConfirm"));
         // The snapshot is only consumed once the user has answered — declining
         // (or the app dying while this dialog is up) must not destroy it.
         if (!wantsRestore) {

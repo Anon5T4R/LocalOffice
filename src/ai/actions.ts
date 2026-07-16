@@ -1,66 +1,78 @@
 import type { Editor } from "@tiptap/react";
+import { t, type MessageKey } from "../lib/i18n";
 
 // What happens to the model's answer once it's ready.
 export type ResultMode = "replace" | "insert" | "show";
 
 export interface SelectionAction {
   id: string;
-  label: string;
+  /** i18n key of the label shown in the panel message. */
+  labelKey: MessageKey;
   mode: ResultMode;
-  /** System prompt; `arg` carries an extra parameter (e.g. target language). */
+  /** System prompt; `arg` carries an extra parameter (e.g. target language).
+   *  Resolved through t() at call time, so it follows the UI language (the AI
+   *  answers in the UI language) and never goes stale on a locale change. */
   system: (arg?: string) => string;
 }
 
-const ONLY = "Responda apenas com o resultado, sem comentários nem aspas.";
+const only = () => t("aiSys.only");
 
 // Actions that operate on the selected text (fired from the bubble menu).
 export const SELECTION_ACTIONS: Record<string, SelectionAction> = {
   rewrite: {
     id: "rewrite",
-    label: "Reescrever",
+    labelKey: "aiAct.rewrite",
     mode: "replace",
-    system: () => `Reescreva o texto a seguir em português, com mais clareza e fluidez, mantendo o sentido. ${ONLY}`,
+    system: () => t("aiSys.rewrite", { only: only() }),
   },
   review: {
     id: "review",
-    label: "Revisar",
+    labelKey: "aiAct.review",
     mode: "replace",
-    system: () => `Corrija gramática, ortografia e pontuação do texto a seguir em português, mudando o mínimo. ${ONLY}`,
+    system: () => t("aiSys.review", { only: only() }),
   },
   bullets: {
     id: "bullets",
-    label: "Virar tópicos",
+    labelKey: "aiAct.bullets",
     mode: "replace",
-    system: () => `Reescreva o conteúdo a seguir como uma lista de tópicos concisos em português, um por linha começando com "- ". ${ONLY}`,
+    system: () => t("aiSys.bullets", { only: only() }),
   },
   summarize: {
     id: "summarize",
-    label: "Resumir trecho",
+    labelKey: "aiAct.summarize",
     mode: "show",
-    system: () => `Resuma o texto a seguir em português, de forma concisa e fiel.`,
+    system: () => t("aiSys.summarize"),
   },
   continue: {
     id: "continue",
-    label: "Continuar",
+    labelKey: "aiAct.continue",
     mode: "insert",
-    system: () => `Continue escrevendo a partir do texto a seguir, em português, mantendo estilo e tom. Não repita o texto dado; escreva apenas a continuação.`,
+    system: () => t("aiSys.continue"),
   },
   translate: {
     id: "translate",
-    label: "Traduzir",
+    labelKey: "aiAct.translate",
     mode: "replace",
-    system: (lang) => `Traduza o texto a seguir para ${lang || "inglês"}. ${ONLY}`,
+    system: (lang) => t("aiSys.translate", { lang: lang || t("aiLang.en"), only: only() }),
   },
   tone: {
     id: "tone",
-    label: "Mudar tom",
+    labelKey: "aiAct.tone",
     mode: "replace",
-    system: (tone) => `Reescreva o texto a seguir em português com tom ${tone || "formal"}, mantendo o sentido. ${ONLY}`,
+    system: (tone) => t("aiSys.tone", { tone: tone || t("aiTone.formal"), only: only() }),
   },
 };
 
-export const TRANSLATE_LANGS = ["Inglês", "Espanhol", "Francês", "Alemão", "Italiano", "Português"];
-export const TONES = ["formal", "informal"];
+/** Target languages for the translate action (localized; factory so it follows
+ *  the UI language on remount instead of freezing at module-load time). */
+export function translateLangs(): string[] {
+  return [t("aiLang.en"), t("aiLang.es"), t("aiLang.fr"), t("aiLang.de"), t("aiLang.it"), t("aiLang.pt")];
+}
+
+/** Tones for the change-tone action (localized factory, same reason). */
+export function tones(): string[] {
+  return [t("aiTone.formal"), t("aiTone.informal")];
+}
 
 // Rough token estimate (~4 chars/token) — good enough to warn before truncation.
 export function estimateTokens(text: string): number {

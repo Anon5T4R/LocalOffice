@@ -1,6 +1,7 @@
 import type { JSONContent } from "@tiptap/core";
 import { DocFormat, baseName } from "./document";
 import { newId } from "./id";
+import { t } from "./i18n";
 
 export interface Tab {
   id: string;
@@ -32,5 +33,5 @@ export function newTab(partial: Partial<Tab> = {}): Tab {
 }
 
 export function tabTitle(tab: Tab): string {
-  return tab.filePath ? baseName(tab.filePath) : "sem título";
+  return tab.filePath ? baseName(tab.filePath) : t("common.untitled");
 }

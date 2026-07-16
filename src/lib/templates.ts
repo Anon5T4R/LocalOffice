@@ -2,6 +2,7 @@ import { Editor } from "@tiptap/core";
 import { ptToPx } from "./fontUnits";
 import type { DocStyles } from "./docStyles";
 import { HeaderFooterSpec, PageFormat, PageMargins } from "./settings";
+import { t, type MessageKey } from "./i18n";
 
 /** Norm sizes are given in points; every internal metric is px (fontUnits). */
 const pt = (n: number) => `${ptToPx(n)}px`;
@@ -159,6 +160,33 @@ export const TEMPLATES: Record<string, DocTemplate> = {
     styles: { generated: { fontFamily: "Times New Roman", fontSizePx: ptToPx(12), lineHeight: 1.15 } },
   },
 };
+
+/** Localized name/description shown in the Layout template picker. Resolved via
+ *  t() at call time (factory, not the module-const `name`/`description` fields)
+ *  so the labels follow the UI language on remount. The template's seed content
+ *  (abntContent) stays in pt — it's ABNT document scaffolding (domain). */
+const TEMPLATE_NAME_KEYS: Record<string, MessageKey> = {
+  abnt: "tmpl.abnt.name",
+  apa: "tmpl.apa.name",
+  artigo: "tmpl.artigo.name",
+  relatorio: "tmpl.relatorio.name",
+  carta: "tmpl.carta.name",
+};
+const TEMPLATE_DESC_KEYS: Record<string, MessageKey> = {
+  abnt: "tmpl.abnt.desc",
+  apa: "tmpl.apa.desc",
+  artigo: "tmpl.artigo.desc",
+  relatorio: "tmpl.relatorio.desc",
+  carta: "tmpl.carta.desc",
+};
+
+export function templateName(key: string): string {
+  return TEMPLATE_NAME_KEYS[key] ? t(TEMPLATE_NAME_KEYS[key]) : (TEMPLATES[key]?.name ?? key);
+}
+
+export function templateDesc(key: string): string {
+  return TEMPLATE_DESC_KEYS[key] ? t(TEMPLATE_DESC_KEYS[key]) : (TEMPLATES[key]?.description ?? "");
+}
 
 /** Apply a template's content formatting (font, size, line-height, alignment) to the entire document. */
 export function applyTemplateContent(editor: Editor, tmpl: DocTemplate): void {

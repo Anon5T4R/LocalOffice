@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useEditorState } from "@tiptap/react";
 import { searchKey } from "./SearchExtension";
 import { useEditorInstance } from "../../state/EditorContext";
+import { t } from "../../lib/i18n";
 
 export function SearchBar({ onClose }: { onClose: () => void }) {
   const editor = useEditorInstance();
@@ -47,12 +48,12 @@ export function SearchBar({ onClose }: { onClose: () => void }) {
             close();
           }
         }}
-        placeholder="Buscar no documento…"
+        placeholder={t("search.placeholder")}
       />
       <span className="search-count">{total ? `${current + 1}/${total}` : "0/0"}</span>
-      <button className="tb-btn" onClick={() => editor.commands.findPrev()} disabled={!total} title="Anterior (Shift+Enter)">↑</button>
-      <button className="tb-btn" onClick={() => editor.commands.findNext()} disabled={!total} title="Próximo (Enter)">↓</button>
-      <button className="tb-btn" onClick={close} title="Fechar (Esc)">✕</button>
+      <button className="tb-btn" onClick={() => editor.commands.findPrev()} disabled={!total} title={t("search.prev")}>↑</button>
+      <button className="tb-btn" onClick={() => editor.commands.findNext()} disabled={!total} title={t("search.next")}>↓</button>
+      <button className="tb-btn" onClick={close} title={t("search.close")}>✕</button>
     </div>
   );
 }

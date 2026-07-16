@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Recent } from "../lib/settings";
 import { useSettings } from "../state/SettingsContext";
+import { t } from "../lib/i18n";
 
 interface MenuBarProps {
   aiOpen: boolean;
@@ -33,8 +34,8 @@ function RecentsMenu({ recents, onPick }: { recents: Recent[]; onPick: (path: st
 
   return (
     <div className="tb-dropdown" ref={ref}>
-      <button type="button" className="tb-btn" onClick={() => setOpen((v) => !v)} disabled={recents.length === 0} title="Arquivos recentes">
-        Recentes ▾
+      <button type="button" className="tb-btn" onClick={() => setOpen((v) => !v)} disabled={recents.length === 0} title={t("menubar.recentsTitle")}>
+        {t("menubar.recents")}
       </button>
       {open && (
         <div className="tb-menu">
@@ -79,21 +80,21 @@ export function MenuBar({
       <span className="brand">LocalOffice</span>
       <div className="tb-sep" />
       <div className="tb-group">
-        <button className="tb-btn" onClick={onNew} title="Nova aba (Ctrl+T / Ctrl+N)">Novo</button>
-        <button className="tb-btn" onClick={onOpen} title="Abrir (Ctrl+O)">Abrir</button>
+        <button className="tb-btn" onClick={onNew} title={t("menubar.newTitle")}>{t("menubar.new")}</button>
+        <button className="tb-btn" onClick={onOpen} title={t("menubar.openTitle")}>{t("menubar.open")}</button>
         <RecentsMenu recents={recents} onPick={onOpenRecent} />
-        <button className="tb-btn" onClick={onSave} title="Salvar (Ctrl+S)">Salvar</button>
-        <button className="tb-btn" onClick={onSaveAs} title="Salvar como (Ctrl+Shift+S)">Salvar como…</button>
-        <button className="tb-btn" onClick={onExportPdf} title="Exportar como PDF">PDF</button>
-        <button className="tb-btn" onClick={onVersionHistory} title="Histórico de versões">⏱ Versões</button>
+        <button className="tb-btn" onClick={onSave} title={t("menubar.saveTitle")}>{t("menubar.save")}</button>
+        <button className="tb-btn" onClick={onSaveAs} title={t("menubar.saveAsTitle")}>{t("menubar.saveAs")}</button>
+        <button className="tb-btn" onClick={onExportPdf} title={t("menubar.pdfTitle")}>{t("menubar.pdf")}</button>
+        <button className="tb-btn" onClick={onVersionHistory} title={t("menubar.versionsTitle")}>{t("menubar.versions")}</button>
       </div>
 
       <div className="tb-spacer" />
 
-      <button className={"tb-btn" + (chaptersOpen ? " is-active" : "")} onClick={onToggleChapters} title="Capítulos (outline)">☰ Capítulos</button>
-      <button className={"tb-btn" + (reviewOpen ? " is-active" : "")} onClick={onToggleReview} title="Comentários e alterações controladas">✎ Revisão</button>
-      <button className={"tb-btn" + (aiOpen ? " is-active" : "")} onClick={onToggleAi} title="Painel de IA local">✦ IA</button>
-      <button className="tb-btn" onClick={onOpenSettings} title="Configurações">⚙</button>
+      <button className={"tb-btn" + (chaptersOpen ? " is-active" : "")} onClick={onToggleChapters} title={t("menubar.chaptersTitle")}>{t("menubar.chapters")}</button>
+      <button className={"tb-btn" + (reviewOpen ? " is-active" : "")} onClick={onToggleReview} title={t("menubar.reviewTitle")}>{t("menubar.review")}</button>
+      <button className={"tb-btn" + (aiOpen ? " is-active" : "")} onClick={onToggleAi} title={t("menubar.aiTitle")}>{t("menubar.ai")}</button>
+      <button className="tb-btn" onClick={onOpenSettings} title={t("menubar.settingsTitle")}>⚙</button>
     </div>
   );
 }

@@ -5,6 +5,7 @@ import { useSettings } from "../../state/SettingsContext";
 import { cssSizeToPt, ptToPx } from "../../lib/fontUnits";
 import { Btn } from "./Btn";
 import { CASE_FNS, buildFontList, transformCase } from "./shared";
+import { t } from "../../lib/i18n";
 
 interface HomeTabProps {
   /** Format painter armed state — owned by Ribbon so it survives tab switches. */
@@ -60,16 +61,16 @@ export function HomeTab({ painterActive, onCopyFormat }: HomeTabProps) {
   return (
     <div className="ribbon-body">
       <div className="tb-group">
-        <Btn onClick={() => chain().undo().run()} disabled={!s.canUndo} title="Desfazer (Ctrl+Z)">↶</Btn>
-        <Btn onClick={() => chain().redo().run()} disabled={!s.canRedo} title="Refazer (Ctrl+Y)">↷</Btn>
+        <Btn onClick={() => chain().undo().run()} disabled={!s.canUndo} title={t("home.undo")}>↶</Btn>
+        <Btn onClick={() => chain().redo().run()} disabled={!s.canRedo} title={t("home.redo")}>↷</Btn>
       </div>
       <div className="tb-sep" />
 
       <div className="tb-group">
-        <Btn onClick={() => chain().setParagraph().run()} active={s.paragraph} title="Texto normal">¶</Btn>
-        <Btn onClick={() => chain().toggleHeading({ level: 1 }).run()} active={s.h1} title="Título 1">H1</Btn>
-        <Btn onClick={() => chain().toggleHeading({ level: 2 }).run()} active={s.h2} title="Título 2">H2</Btn>
-        <Btn onClick={() => chain().toggleHeading({ level: 3 }).run()} active={s.h3} title="Título 3">H3</Btn>
+        <Btn onClick={() => chain().setParagraph().run()} active={s.paragraph} title={t("home.paragraph")}>¶</Btn>
+        <Btn onClick={() => chain().toggleHeading({ level: 1 }).run()} active={s.h1} title={t("home.h1")}>H1</Btn>
+        <Btn onClick={() => chain().toggleHeading({ level: 2 }).run()} active={s.h2} title={t("home.h2")}>H2</Btn>
+        <Btn onClick={() => chain().toggleHeading({ level: 3 }).run()} active={s.h3} title={t("home.h3")}>H3</Btn>
       </div>
       <div className="tb-sep" />
 
@@ -80,15 +81,15 @@ export function HomeTab({ painterActive, onCopyFormat }: HomeTabProps) {
           onChange={(e) => {
             if (e.target.value) chain().setFontFamily(e.target.value).run();
           }}
-          title="Fonte"
+          title={t("home.font")}
         >
-          <option value="">Fonte</option>
+          <option value="">{t("home.font")}</option>
           {allFonts.map((f) => (
             <option key={f} value={f}>{f}</option>
           ))}
         </select>
-        <Btn onClick={() => chain().unsetFontFamily().run()} title="Fonte padrão" disabled={!s.fontFamily}>↺</Btn>
-        <Btn onClick={importFont} title="Importar fonte">+F</Btn>
+        <Btn onClick={() => chain().unsetFontFamily().run()} title={t("home.fontDefault")} disabled={!s.fontFamily}>↺</Btn>
+        <Btn onClick={importFont} title={t("home.importFont")}>+F</Btn>
       </div>
       <div className="tb-group">
         <div className="tb-size-wrap">
@@ -99,14 +100,14 @@ export function HomeTab({ painterActive, onCopyFormat }: HomeTabProps) {
             max={999}
             step={0.5}
             value={cssSizeToPt(s.fontSize) ?? ""}
-            placeholder="Tam."
+            placeholder={t("home.fontSizePlaceholder")}
             onChange={(e) => {
               const v = parseFloat(e.target.value);
               // A UI fala pontos (o "12" da ABNT/Word); o mark grava px, a
               // unidade de todo o motor de layout (lib/fontUnits.ts).
               if (!Number.isNaN(v) && v > 0) chain().setFontSize(`${ptToPx(v)}px`).run();
             }}
-            title="Tamanho da fonte em pontos (o mesmo 12 do Word/ABNT)"
+            title={t("home.fontSizeTitle")}
             list="font-sizes"
           />
           <datalist id="font-sizes">
@@ -115,23 +116,23 @@ export function HomeTab({ painterActive, onCopyFormat }: HomeTabProps) {
             ))}
           </datalist>
         </div>
-        <Btn onClick={() => chain().unsetFontSize().run()} title="Tamanho padrão" disabled={!s.fontSize}>↺</Btn>
+        <Btn onClick={() => chain().unsetFontSize().run()} title={t("home.fontSizeDefault")} disabled={!s.fontSize}>↺</Btn>
       </div>
       <div className="tb-sep" />
 
       <div className="tb-group">
-        <Btn onClick={() => chain().toggleBold().run()} active={s.bold} title="Negrito (Ctrl+B)"><b>B</b></Btn>
-        <Btn onClick={() => chain().toggleItalic().run()} active={s.italic} title="Itálico (Ctrl+I)"><i>I</i></Btn>
-        <Btn onClick={() => chain().toggleUnderline().run()} active={s.underline} title="Sublinhado (Ctrl+U)"><u>U</u></Btn>
-        <Btn onClick={() => chain().toggleStrike().run()} active={s.strike} title="Riscado"><s>S</s></Btn>
-        <Btn onClick={() => chain().toggleSuperscript().run()} active={s.superscript} title="Sobrescrito (Ctrl+.)">x<sup>2</sup></Btn>
-        <Btn onClick={() => chain().toggleSubscript().run()} active={s.subscript} title="Subscrito (Ctrl+,)">x<sub>2</sub></Btn>
-        <Btn onClick={() => chain().toggleCode().run()} active={s.code} title="Código inline">{"</>"}</Btn>
+        <Btn onClick={() => chain().toggleBold().run()} active={s.bold} title={t("home.bold")}><b>B</b></Btn>
+        <Btn onClick={() => chain().toggleItalic().run()} active={s.italic} title={t("home.italic")}><i>I</i></Btn>
+        <Btn onClick={() => chain().toggleUnderline().run()} active={s.underline} title={t("home.underline")}><u>U</u></Btn>
+        <Btn onClick={() => chain().toggleStrike().run()} active={s.strike} title={t("home.strike")}><s>S</s></Btn>
+        <Btn onClick={() => chain().toggleSuperscript().run()} active={s.superscript} title={t("home.superscript")}>x<sup>2</sup></Btn>
+        <Btn onClick={() => chain().toggleSubscript().run()} active={s.subscript} title={t("home.subscript")}>x<sub>2</sub></Btn>
+        <Btn onClick={() => chain().toggleCode().run()} active={s.code} title={t("home.code")}>{"</>"}</Btn>
       </div>
       <div className="tb-sep" />
 
       <div className="tb-group">
-        <label className="tb-btn tb-color" title="Cor do realce">
+        <label className="tb-btn tb-color" title={t("home.highlightColor")}>
           <svg viewBox="0 0 20 20" width="16" height="16" fill="none">
             <path d="M4 16l-2 3 3-2 9-9-2-2-8 8z" stroke="currentColor" strokeWidth="1.3"/>
             <path d="M12 6l2 2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
@@ -144,7 +145,7 @@ export function HomeTab({ painterActive, onCopyFormat }: HomeTabProps) {
             onMouseDown={(e) => e.stopPropagation()}
           />
         </label>
-        <label className="tb-btn tb-color" title="Cor do texto">
+        <label className="tb-btn tb-color" title={t("home.textColor")}>
           <svg viewBox="0 0 20 20" width="16" height="16" fill="none">
             <text x="10" y="15" textAnchor="middle" fontSize="14" fontWeight="bold" fill="currentColor">A</text>
             <line x1="3" y1="18" x2="17" y2="18" stroke={s.color || "#666"} strokeWidth="2.5" strokeLinecap="round"/>
@@ -156,7 +157,7 @@ export function HomeTab({ painterActive, onCopyFormat }: HomeTabProps) {
             onMouseDown={(e) => e.stopPropagation()}
           />
         </label>
-        <Btn onClick={() => chain().unsetColor().run()} title="Remover cor">
+        <Btn onClick={() => chain().unsetColor().run()} title={t("home.removeColor")}>
           <svg viewBox="0 0 20 20" width="16" height="16" fill="none">
             <text x="10" y="15" textAnchor="middle" fontSize="14" fontWeight="bold" fill="currentColor">A</text>
             <line x1="3" y1="18" x2="17" y2="18" stroke="#666" strokeWidth="2.5" strokeLinecap="round"/>
@@ -167,20 +168,20 @@ export function HomeTab({ painterActive, onCopyFormat }: HomeTabProps) {
       <div className="tb-sep" />
 
       <div className="tb-group">
-        <Btn onClick={() => chain().setTextAlign("left").run()} active={s.alignLeft} title="Alinhar à esquerda">⬅</Btn>
-        <Btn onClick={() => chain().setTextAlign("center").run()} active={s.alignCenter} title="Centralizar">⬌</Btn>
-        <Btn onClick={() => chain().setTextAlign("right").run()} active={s.alignRight} title="Alinhar à direita">➡</Btn>
-        <Btn onClick={() => chain().setTextAlign("justify").run()} active={s.alignJustify} title="Justificar">☰</Btn>
-        <Btn onClick={() => chain().changeIndent(-1).run()} title="Diminuir recuo (Ctrl+[)">⇤</Btn>
-        <Btn onClick={() => chain().changeIndent(1).run()} title="Aumentar recuo (Ctrl+]) — 4cm = citação longa ABNT">⇥</Btn>
+        <Btn onClick={() => chain().setTextAlign("left").run()} active={s.alignLeft} title={t("home.alignLeft")}>⬅</Btn>
+        <Btn onClick={() => chain().setTextAlign("center").run()} active={s.alignCenter} title={t("home.alignCenter")}>⬌</Btn>
+        <Btn onClick={() => chain().setTextAlign("right").run()} active={s.alignRight} title={t("home.alignRight")}>➡</Btn>
+        <Btn onClick={() => chain().setTextAlign("justify").run()} active={s.alignJustify} title={t("home.alignJustify")}>☰</Btn>
+        <Btn onClick={() => chain().changeIndent(-1).run()} title={t("home.indentDec")}>⇤</Btn>
+        <Btn onClick={() => chain().changeIndent(1).run()} title={t("home.indentInc")}>⇥</Btn>
       </div>
       <div className="tb-sep" />
 
       <div className="tb-group">
-        <Btn onClick={() => chain().toggleBulletList().run()} active={s.bullet} title="Lista com marcadores">• Lista</Btn>
-        <Btn onClick={() => chain().toggleOrderedList().run()} active={s.ordered} title="Lista numerada">1. Lista</Btn>
-        <Btn onClick={() => chain().toggleTaskList().run()} active={s.task} title="Lista de tarefas">☑</Btn>
-        <Btn onClick={() => chain().toggleBlockquote().run()} active={s.quote} title="Citação">❝</Btn>
+        <Btn onClick={() => chain().toggleBulletList().run()} active={s.bullet} title={t("home.bulletTitle")}>{t("home.bulletLabel")}</Btn>
+        <Btn onClick={() => chain().toggleOrderedList().run()} active={s.ordered} title={t("home.orderedTitle")}>{t("home.orderedLabel")}</Btn>
+        <Btn onClick={() => chain().toggleTaskList().run()} active={s.task} title={t("home.taskTitle")}>☑</Btn>
+        <Btn onClick={() => chain().toggleBlockquote().run()} active={s.quote} title={t("home.quoteTitle")}>❝</Btn>
       </div>
       <div className="tb-sep" />
 
@@ -193,15 +194,15 @@ export function HomeTab({ painterActive, onCopyFormat }: HomeTabProps) {
             if (fn) transformCase(editor, fn);
             e.target.value = "";
           }}
-          title="Alterar maiúsculas/minúsculas da seleção"
+          title={t("home.caseTitle")}
         >
-          <option value="">Aa ▾</option>
-          <option value="upper">MAIÚSCULAS</option>
-          <option value="lower">minúsculas</option>
-          <option value="title">Iniciais Maiúsculas</option>
+          <option value="">{t("home.caseMenu")}</option>
+          <option value="upper">{t("home.caseUpper")}</option>
+          <option value="lower">{t("home.caseLower")}</option>
+          <option value="title">{t("home.caseTitleCase")}</option>
         </select>
-        <Btn onClick={onCopyFormat} active={painterActive} title="Pincel de formatação (copie o formato e selecione o destino)">🖌</Btn>
-        <Btn onClick={() => chain().unsetAllMarks().clearNodes().run()} title="Limpar formatação">⌫ Limpar</Btn>
+        <Btn onClick={onCopyFormat} active={painterActive} title={t("home.painter")}>🖌</Btn>
+        <Btn onClick={() => chain().unsetAllMarks().clearNodes().run()} title={t("home.clearTitle")}>{t("home.clearLabel")}</Btn>
       </div>
     </div>
   );

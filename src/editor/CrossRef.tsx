@@ -5,6 +5,7 @@ import { advanceHeadingCounter, newHeadingCounters } from "./HeadingNumbers";
 import { CAPTION_LABELS, captionKindOf } from "../lib/captionNumbers";
 import { newId } from "../lib/id";
 import { revealPos } from "./reveal";
+import { t } from "../lib/i18n";
 
 declare module "@tiptap/core" {
   interface Commands<ReturnType> {
@@ -115,7 +116,7 @@ function CrossRefView({ node, editor }: NodeViewProps) {
     <NodeViewWrapper
       as="span"
       className={"crossref" + (resolved ? "" : " crossref-missing")}
-      title={resolved ? "Referência cruzada — clique para ir ao alvo" : "Alvo da referência não existe mais"}
+      title={resolved ? t("crossref.title") : t("crossref.missing")}
       onClick={resolved ? () => revealPos(editor, resolved.pos) : undefined}
     >
       {resolved?.label ?? "ref?"}

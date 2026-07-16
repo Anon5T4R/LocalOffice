@@ -1507,6 +1507,17 @@ body {
   font-size: 12px;
 }
 
+/* Seletor de idioma da UI (Configurações). Herda o estilo de .ai-field select
+   quando aninhado, mas a regra própria garante consistência em qualquer lugar. */
+.lang-select {
+  padding: 5px 7px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 12px;
+}
+
 .ai-row {
   display: flex;
   gap: 6px;

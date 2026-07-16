@@ -5,6 +5,7 @@ import { useEditorInstance } from "../../state/EditorContext";
 import { HomeTab } from "./HomeTab";
 import { InsertTab } from "./InsertTab";
 import { LayoutTab } from "./LayoutTab";
+import { t } from "../../lib/i18n";
 
 interface RibbonProps {
   onInsertImage: () => void;
@@ -49,13 +50,13 @@ export function Ribbon({ onInsertImage, onApplyTemplate }: RibbonProps) {
     <div className="ribbon">
       <div className="ribbon-tabs">
         <button className={"ribbon-tab" + (tab === "inicio" ? " is-active" : "")} onClick={() => setTab("inicio")}>
-          Início
+          {t("ribbon.home")}
         </button>
         <button className={"ribbon-tab" + (tab === "inserir" ? " is-active" : "")} onClick={() => setTab("inserir")}>
-          Inserir
+          {t("ribbon.insert")}
         </button>
         <button className={"ribbon-tab" + (tab === "layout" ? " is-active" : "")} onClick={() => setTab("layout")}>
-          Layout
+          {t("ribbon.layout")}
         </button>
       </div>
 

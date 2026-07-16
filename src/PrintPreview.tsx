@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { PrintOptions, cleanupPaged, printLegacy, renderPaged } from "./lib/pdf";
 import { useFocusTrap } from "./hooks/useFocusTrap";
+import { t } from "./lib/i18n";
 
 interface PrintPreviewProps {
   html: string;
@@ -66,13 +67,15 @@ export function PrintPreview({ html, options, onClose }: PrintPreviewProps) {
   };
 
   return createPortal(
-    <div ref={rootRef} className="print-preview" role="dialog" aria-modal="true" aria-label="Visualizar impressão">
+    <div ref={rootRef} className="print-preview" role="dialog" aria-modal="true" aria-label={t("print.title")}>
       <div className="print-preview-toolbar">
-        <strong>Visualizar impressão</strong>
+        <strong>{t("print.title")}</strong>
         <span className="print-preview-info">
           {state.status === "rendering" &&
-            (state.pagesSoFar > 0 ? `Paginando… (${state.pagesSoFar} página${state.pagesSoFar === 1 ? "" : "s"})` : "Paginando…")}
-          {state.status === "ready" && `${state.pages} página${state.pages === 1 ? "" : "s"}`}
+            (state.pagesSoFar > 0
+              ? `${t("print.paginating")} (${state.pagesSoFar} ${t(state.pagesSoFar === 1 ? "unit.page" : "unit.pages")})`
+              : t("print.paginating"))}
+          {state.status === "ready" && `${state.pages} ${t(state.pages === 1 ? "unit.page" : "unit.pages")}`}
         </span>
         {state.status === "rendering" && <span className="print-preview-progress" aria-hidden="true" />}
         <div className="tb-spacer" />
@@ -80,17 +83,17 @@ export function PrintPreview({ html, options, onClose }: PrintPreviewProps) {
           className="tb-btn"
           onClick={() => window.print()}
           disabled={state.status !== "ready"}
-          title="Abre o diálogo de impressão; escolha 'Salvar como PDF' para exportar"
+          title={t("print.printTitle")}
         >
-          🖨 Imprimir / PDF
+          {t("print.print")}
         </button>
-        <button className="tb-btn" onClick={onClose} title="Fechar (Esc)">✕</button>
+        <button className="tb-btn" onClick={onClose} title={t("print.close")}>✕</button>
       </div>
 
       {state.status === "error" && (
         <div className="print-preview-error">
-          <p>A paginação falhou; você ainda pode exportar no modo simples (sem cabeçalho/rodapé).</p>
-          <button className="tb-btn" onClick={fallback}>Exportar no modo simples</button>
+          <p>{t("print.errorText")}</p>
+          <button className="tb-btn" onClick={fallback}>{t("print.fallback")}</button>
         </div>
       )}
 

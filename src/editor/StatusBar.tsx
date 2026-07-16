@@ -6,6 +6,7 @@ import { effectiveLayout } from "./DocLayout";
 import { getPageCount } from "./PageBreaks";
 import { useSettings } from "../state/SettingsContext";
 import { useEditorInstance } from "../state/EditorContext";
+import { t as tr, localeTag } from "../lib/i18n";
 
 const WORDS_PER_MINUTE = 200;
 
@@ -83,40 +84,40 @@ export function StatusBar({ onZoomChange, activeTabId }: StatusBarProps) {
 
   return (
     <div className="status-bar">
-      <span title="Estimativa baseada na altura do conteúdo">
-        ~{pages} página{pages > 1 ? "s" : ""}
+      <span title={tr("status.pagesTitle")}>
+        ~{pages} {tr(pages === 1 ? "unit.page" : "unit.pages")}
       </span>
       {selWords > 0 ? (
-        <span title="Seleção">{selWords} de {words} palavra{words === 1 ? "" : "s"} · {selChars} caractere{selChars === 1 ? "" : "s"}</span>
+        <span title={tr("status.selection")}>{selWords} {tr("status.of")} {words} {tr(words === 1 ? "unit.word" : "unit.words")} · {selChars} {tr(selChars === 1 ? "unit.char" : "unit.chars")}</span>
       ) : (
-        <span title={`${charsNoSpaces} caracteres sem espaços · ${paragraphs} parágrafo${paragraphs === 1 ? "" : "s"}`}>
-          {words} palavra{words === 1 ? "" : "s"} · {chars} caractere{chars === 1 ? "" : "s"}
+        <span title={`${charsNoSpaces} ${tr("status.charsNoSpaces")} · ${paragraphs} ${tr(paragraphs === 1 ? "unit.paragraph" : "unit.paragraphs")}`}>
+          {words} {tr(words === 1 ? "unit.word" : "unit.words")} · {chars} {tr(chars === 1 ? "unit.char" : "unit.chars")}
         </span>
       )}
-      <span title="Tempo de leitura estimado (~200 palavras/min)">{readMin} min de leitura</span>
+      <span title={tr("status.readTitle")}>{tr("status.readMin", { n: readMin })}</span>
       {saveStatus.kind === "error" && (
         <span className="status-save-error" title={saveStatus.message}>
-          ⚠ Falha ao salvar automaticamente — Ctrl+S para tentar de novo
+          {tr("status.saveError")}
         </span>
       )}
-      {saveStatus.kind === "saving" && <span className="status-saving">Salvando…</span>}
+      {saveStatus.kind === "saving" && <span className="status-saving">{tr("status.saving")}</span>}
       {saveStatus.kind === "saved" && (
-        <span className="status-saved" title="Última gravação em disco bem-sucedida">
-          Salvo às {new Date(saveStatus.at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+        <span className="status-saved" title={tr("status.savedTitle")}>
+          {tr("status.savedAt", { time: new Date(saveStatus.at).toLocaleTimeString(localeTag(), { hour: "2-digit", minute: "2-digit" }) })}
         </span>
       )}
       {wordGoal ? (
         <span
           className={"status-goal" + (words >= wordGoal ? " is-done" : "")}
-          title={`Meta de palavras: ${wordGoal} (configurável em ⚙)`}
+          title={tr("status.goalTitle", { goal: wordGoal })}
         >
           🎯 {Math.min(100, Math.round((words / wordGoal) * 100))}%
         </span>
       ) : null}
       <span className="status-zoom">
-        <button type="button" className="status-zoom-btn" onClick={() => onZoomChange(zoom - 10)} title="Diminuir zoom (Ctrl −)">−</button>
-        <button type="button" className="status-zoom-val" onClick={() => onZoomChange(100)} title="Restaurar zoom (Ctrl 0)">{zoom}%</button>
-        <button type="button" className="status-zoom-btn" onClick={() => onZoomChange(zoom + 10)} title="Aumentar zoom (Ctrl +)">+</button>
+        <button type="button" className="status-zoom-btn" onClick={() => onZoomChange(zoom - 10)} title={tr("status.zoomOut")}>−</button>
+        <button type="button" className="status-zoom-val" onClick={() => onZoomChange(100)} title={tr("status.zoomReset")}>{zoom}%</button>
+        <button type="button" className="status-zoom-btn" onClick={() => onZoomChange(zoom + 10)} title={tr("status.zoomIn")}>+</button>
       </span>
     </div>
   );

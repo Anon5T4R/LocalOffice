@@ -1,5 +1,6 @@
 import { Component, Fragment, type ErrorInfo, type ReactNode } from "react";
 import { writeRescue } from "./lib/rescue";
+import { t } from "./lib/i18n";
 
 interface Props {
   children: ReactNode;
@@ -41,19 +42,19 @@ export class ErrorBoundary extends Component<Props, State> {
     const { error, rescued, epoch } = this.state;
     if (error) {
       return (
-        <div className="crash-screen" role="alertdialog" aria-label="Erro inesperado">
+        <div className="crash-screen" role="alertdialog" aria-label={t("crash.ariaLabel")}>
           <div className="crash-box">
-            <h1>Algo deu errado</h1>
+            <h1>{t("crash.title")}</h1>
             <p>
               {rescued === false
-                ? "Não foi possível preservar as alterações mais recentes — o documento voltará ao último salvamento."
-                : "Seus documentos abertos foram preservados."}
+                ? t("crash.rescuedFalse")
+                : t("crash.rescuedTrue")}
             </p>
             <button type="button" onClick={this.recover}>
-              Recuperar
+              {t("crash.recover")}
             </button>
             <details>
-              <summary>Detalhes técnicos</summary>
+              <summary>{t("crash.details")}</summary>
               <pre>{String(error.stack || error)}</pre>
             </details>
           </div>

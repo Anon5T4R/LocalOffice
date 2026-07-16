@@ -17,6 +17,7 @@ import {
   chunkDocument,
   estimateTokens,
 } from "./actions";
+import { t } from "../lib/i18n";
 
 export type Status = "stopped" | "loading" | "ready" | "error";
 
@@ -103,7 +104,7 @@ export function useLocalAi(
 
   const scan = useCallback(async () => {
     if (!dir.trim()) {
-      setStatusMsg("Configure a pasta de modelos (.gguf) em ⚙ Configurações.");
+      setStatusMsg(t("aiStatus.configFolder"));
       return;
     }
     try {
@@ -125,12 +126,12 @@ export function useLocalAi(
 
   const start = useCallback(async () => {
     if (!modelPath) {
-      setStatusMsg("Escolha um modelo primeiro.");
+      setStatusMsg(t("aiStatus.chooseModel"));
       return;
     }
     onPersist({ modelsDir: dir, lastModelPath: modelPath, ngl, ctx });
     setStatus("loading");
-    setStatusMsg("Iniciando llama-server e carregando o modelo…");
+    setStatusMsg(t("aiStatus.starting"));
     try {
       const p = await startLlm(modelPath, ngl, ctx);
       await waitHealthy(p);
@@ -217,18 +218,19 @@ export function useLocalAi(
       if (!editor || !action || status !== "ready" || streaming) return;
       const { from, to, empty } = editor.state.selection;
       if (empty) {
-        setStatusMsg("Selecione um trecho primeiro.");
+        setStatusMsg(t("aiStatus.selectFirst"));
         return;
       }
       const text = editor.state.doc.textBetween(from, to, "\n");
-      const label = arg ? `${action.label} (${arg})` : action.label;
+      const base = t(action.labelKey);
+      const label = arg ? `${base} (${arg})` : base;
       const convo: ChatMsg[] = [
         { role: "system", content: action.system(arg) },
         { role: "user", content: text },
       ];
       await appendAndStream(
         convo,
-        { role: "user", content: `**${label}** — trecho selecionado`, kind: "action" },
+        { role: "user", content: `**${label}** — ${t("aiMsg.selection")}`, kind: "action" },
         { mode: action.mode, from, to }
       );
     },
@@ -242,13 +244,15 @@ export function useLocalAi(
     const maxChars = Math.max(800, Math.floor(ctxRef.current * 4 * 0.55));
     const chunks = await chunkDocument(editor, maxChars);
     if (!chunks.length || !chunks[0].trim()) {
-      setStatusMsg("O documento está vazio.");
+      setStatusMsg(t("aiStatus.docEmpty"));
       return;
     }
 
+    const partsLabel = t(chunks.length === 1 ? "aiMsg.partsOne" : "aiMsg.partsMany", { n: chunks.length });
+    const tokensLabel = t("aiMsg.tokens", { n: estimateTokens(editor.getText()) });
     setMessages((m) => [
       ...m,
-      { role: "user", content: `**Resumir documento** — ${chunks.length} parte(s), ~${estimateTokens(editor.getText())} tokens`, kind: "action" },
+      { role: "user", content: `**${t("aiMsg.summarizeDocTitle")}** — ${partsLabel}, ${tokensLabel}`, kind: "action" },
     ]);
 
     const ac = new AbortController();
@@ -258,12 +262,12 @@ export function useLocalAi(
       const partials: string[] = [];
       for (let i = 0; i < chunks.length; i++) {
         if (ac.signal.aborted) return;
-        setStatusMsg(`Resumindo ${i + 1}/${chunks.length}…`);
+        setStatusMsg(t("aiStatus.summarizing", { i: i + 1, n: chunks.length }));
         let part = "";
         await streamChat(
           portRef.current,
           [
-            { role: "system", content: "Resuma o trecho a seguir em português, de forma concisa e fiel. Responda só com o resumo." },
+            { role: "system", content: t("aiSys.summarizeChunk") },
             { role: "user", content: chunks[i] },
           ],
           (d) => {
@@ -276,13 +280,13 @@ export function useLocalAi(
 
       // Reduce: summarize the partial summaries into one (single pass; the joined
       // partials are far smaller than the document).
-      setStatusMsg("Juntando os resumos…");
-      const joined = partials.map((p, i) => `Parte ${i + 1}:\n${p}`).join("\n\n");
+      setStatusMsg(t("aiStatus.joining"));
+      const joined = partials.map((p, i) => `${t("ai.part", { n: i + 1 })}:\n${p}`).join("\n\n");
       const reduceConvo: ChatMsg[] =
         chunks.length === 1
           ? []
           : [
-              { role: "system", content: "Combine os resumos parciais a seguir em um único resumo coeso do documento, em português." },
+              { role: "system", content: t("aiSys.combine") },
               { role: "user", content: joined },
             ];
 

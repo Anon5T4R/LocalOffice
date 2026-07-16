@@ -4,6 +4,7 @@ import { useEditorInstance } from "../state/EditorContext";
 import { useSettings } from "../state/SettingsContext";
 import { effectiveLayout, patchDocLayout } from "./DocLayout";
 import type { HeaderFooterSpec } from "../lib/settings";
+import { t } from "../lib/i18n";
 
 /** Three aligned inputs (left/center/right) for one line of page chrome. */
 function HeaderFooterRow({
@@ -27,9 +28,9 @@ function HeaderFooterRow({
     <div className="ai-field">
       <span>{label}</span>
       <div className="hf-row">
-        {slot("left", "esquerda")}
-        {slot("center", "centro")}
-        {slot("right", "direita")}
+        {slot("left", t("hf.left"))}
+        {slot("center", t("hf.center"))}
+        {slot("right", t("hf.right"))}
       </div>
     </div>
   );
@@ -62,19 +63,16 @@ export function HeaderFooterModal({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <Modal title="Cabeçalho e rodapé" onClose={onClose} boxStyle={{ width: 560, maxWidth: "94vw" }}>
+    <Modal title={t("hf.title")} onClose={onClose} boxStyle={{ width: 560, maxWidth: "94vw" }}>
       <div className="modal-body">
-        <p className="styles-hint">
-          Valem para este documento (viajam com o arquivo) e aparecem nas páginas do editor,
-          na impressão e no PDF.
-        </p>
+        <p className="styles-hint">{t("hf.hint")}</p>
         <HeaderFooterRow
-          label="Cabeçalho"
+          label={t("hf.header")}
           value={draft.pageHeader}
           onChange={(pageHeader) => setDraft((d) => ({ ...d, pageHeader }))}
         />
         <HeaderFooterRow
-          label="Rodapé"
+          label={t("hf.footer")}
           value={draft.pageFooter}
           onChange={(pageFooter) => setDraft((d) => ({ ...d, pageFooter }))}
         />
@@ -86,30 +84,30 @@ export function HeaderFooterModal({ onClose }: { onClose: () => void }) {
               disabled={draft.pageChromeFrom != null}
               onChange={(e) => setDraft((d) => ({ ...d, pageChromeOnFirst: e.target.checked }))}
             />{" "}
-            Mostrar cabeçalho/rodapé na primeira página
+            {t("hf.showFirst")}
           </span>
         </label>
         <div className="ai-field">
-          <span>Numeração avançada (ABNT: número só na parte textual)</span>
+          <span>{t("hf.advanced")}</span>
           <div className="hf-row">
-            <span className="modal-note" style={{ margin: 0 }}>Mostrar a partir da página física</span>
+            <span className="modal-note" style={{ margin: 0 }}>{t("hf.fromPhysical")}</span>
             <input
               type="number"
               min={1}
               style={{ width: 64 }}
-              placeholder="auto"
+              placeholder={t("hf.autoPlaceholder")}
               value={draft.pageChromeFrom ?? ""}
               onChange={(e) => {
                 const v = parseInt(e.target.value, 10);
                 setDraft((d) => ({ ...d, pageChromeFrom: Number.isNaN(v) ? null : Math.max(1, v) }));
               }}
             />
-            <span className="modal-note" style={{ margin: 0 }}>numerada como</span>
+            <span className="modal-note" style={{ margin: 0 }}>{t("hf.numberedAs")}</span>
             <input
               type="number"
               min={0}
               style={{ width: 64 }}
-              placeholder="igual"
+              placeholder={t("hf.samePlaceholder")}
               value={draft.pageNumberStart ?? ""}
               onChange={(e) => {
                 const v = parseInt(e.target.value, 10);
@@ -118,13 +116,11 @@ export function HeaderFooterModal({ onClose }: { onClose: () => void }) {
             />
           </div>
         </div>
-        <p className="modal-note">
-          Use os marcadores {"{page}"}, {"{pages}"}, {"{title}"} e {"{date}"} — ex.: "Página {"{page}"} de {"{pages}"}".
-        </p>
+        <p className="modal-note">{t("hf.tokens")}</p>
         <div className="styles-actions">
           <span style={{ flex: 1 }} />
-          <button className="tb-btn" onClick={onClose}>Cancelar</button>
-          <button className="tb-btn tb-primary" onClick={apply}>Aplicar</button>
+          <button className="tb-btn" onClick={onClose}>{t("common.cancel")}</button>
+          <button className="tb-btn tb-primary" onClick={apply}>{t("common.apply")}</button>
         </div>
       </div>
     </Modal>

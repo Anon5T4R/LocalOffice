@@ -3,6 +3,7 @@ import { Editor, useEditorState } from "@tiptap/react";
 import { useSettings } from "../state/SettingsContext";
 import { useEditorInstance } from "../state/EditorContext";
 import { arrayOfObjectsEqual } from "../lib/equality";
+import { t, localeTag } from "../lib/i18n";
 
 interface CommentItem {
   id: string;
@@ -84,7 +85,7 @@ export function ReviewPanel({ onClose }: ReviewPanelProps) {
   const editor = useEditorInstance();
   const { settings, updateSettings } = useSettings();
   const trackChanges = settings.trackChanges === true;
-  const authorName = settings.authorName || "Autor";
+  const authorName = settings.authorName || t("review.authorFallback");
   const [newComment, setNewComment] = useState("");
 
   const { comments, changes, hasSelection } = useEditorState({
@@ -113,22 +114,22 @@ export function ReviewPanel({ onClose }: ReviewPanelProps) {
   return (
     <aside className="chapters-panel review-panel">
       <div className="panel-header">
-        <strong>Revisão</strong>
+        <strong>{t("review.title")}</strong>
         <span className="ai-spacer" />
-        <button className="tb-btn" onClick={onClose} title="Fechar painel">✕</button>
+        <button className="tb-btn" onClick={onClose} title={t("common.closePanel")}>✕</button>
       </div>
 
-      <label className="review-track-toggle" title="Registrar inserções e exclusões como alterações controladas">
+      <label className="review-track-toggle" title={t("review.trackToggleTitle")}>
         <input type="checkbox" checked={trackChanges} onChange={() => updateSettings({ trackChanges: !trackChanges })} />
-        Controlar alterações
+        {t("review.trackToggle")}
       </label>
 
       <div className="review-section">
-        <div className="review-section-title">Comentários</div>
+        <div className="review-section-title">{t("review.comments")}</div>
         <div className="review-new-comment">
           <textarea
             value={newComment}
-            placeholder={hasSelection ? "Comentar o trecho selecionado…" : "Selecione um trecho para comentar"}
+            placeholder={hasSelection ? t("review.commentPlaceholderSel") : t("review.commentPlaceholderNone")}
             disabled={!hasSelection}
             rows={2}
             onChange={(e) => setNewComment(e.target.value)}
@@ -140,30 +141,30 @@ export function ReviewPanel({ onClose }: ReviewPanelProps) {
             }}
           />
           <button className="tb-btn" disabled={!hasSelection || !newComment.trim()} onClick={addComment}>
-            Comentar
+            {t("review.comment")}
           </button>
         </div>
 
-        {comments.length === 0 && <div className="ai-empty">Nenhum comentário.</div>}
+        {comments.length === 0 && <div className="ai-empty">{t("review.noComments")}</div>}
         {comments.map((c) => (
           <div key={c.id} className={"review-card" + (c.resolved ? " is-resolved" : "")}>
-            <button className="review-excerpt" onClick={() => go(c.from)} title="Ir para o trecho">
+            <button className="review-excerpt" onClick={() => go(c.from)} title={t("review.goToExcerpt")}>
               “{c.excerpt}”
             </button>
             <div className="review-body">{c.text}</div>
             <div className="review-meta">
-              <span>{c.author || "—"} · {c.ts ? new Date(c.ts).toLocaleDateString() : ""}</span>
+              <span>{c.author || "—"} · {c.ts ? new Date(c.ts).toLocaleDateString(localeTag()) : ""}</span>
               <span className="ai-spacer" />
               <button
                 className="tb-btn"
-                title={c.resolved ? "Reabrir" : "Resolver"}
+                title={c.resolved ? t("review.reopen") : t("review.resolve")}
                 onClick={() => editor.chain().updateComment(c.id, { resolved: !c.resolved }).run()}
               >
                 {c.resolved ? "↺" : "✓"}
               </button>
               <button
                 className="tb-btn"
-                title="Excluir comentário"
+                title={t("review.deleteComment")}
                 onClick={() => editor.chain().removeComment(c.id).run()}
               >
                 🗑
@@ -175,34 +176,34 @@ export function ReviewPanel({ onClose }: ReviewPanelProps) {
 
       <div className="review-section">
         <div className="review-section-title">
-          Alterações
+          {t("review.changes")}
           {changes.length > 0 && (
             <>
               <span className="ai-spacer" />
-              <button className="tb-btn" title="Aceitar todas" onClick={() => editor.chain().focus().resolveAllChanges(true).run()}>✓ todas</button>
-              <button className="tb-btn" title="Rejeitar todas" onClick={() => editor.chain().focus().resolveAllChanges(false).run()}>✕ todas</button>
+              <button className="tb-btn" title={t("review.acceptAll")} onClick={() => editor.chain().focus().resolveAllChanges(true).run()}>{t("review.acceptAllLabel")}</button>
+              <button className="tb-btn" title={t("review.rejectAll")} onClick={() => editor.chain().focus().resolveAllChanges(false).run()}>{t("review.rejectAllLabel")}</button>
             </>
           )}
         </div>
-        {changes.length === 0 && <div className="ai-empty">Nenhuma alteração registrada.</div>}
+        {changes.length === 0 && <div className="ai-empty">{t("review.noChanges")}</div>}
         {changes.map((ch, i) => (
           <div key={i} className="review-card">
-            <button className="review-excerpt" onClick={() => go(ch.from)} title="Ir para o trecho">
-              <span className={ch.kind === "insertion" ? "track-ins" : "track-del"}>{ch.excerpt || "(vazio)"}</span>
+            <button className="review-excerpt" onClick={() => go(ch.from)} title={t("review.goToExcerpt")}>
+              <span className={ch.kind === "insertion" ? "track-ins" : "track-del"}>{ch.excerpt || t("review.empty")}</span>
             </button>
             <div className="review-meta">
-              <span>{ch.kind === "insertion" ? "Inserido" : "Excluído"} · {ch.author || "—"}</span>
+              <span>{ch.kind === "insertion" ? t("review.inserted") : t("review.deleted")} · {ch.author || "—"}</span>
               <span className="ai-spacer" />
               <button
                 className="tb-btn"
-                title="Aceitar"
+                title={t("review.accept")}
                 onClick={() => editor.chain().focus().resolveChange({ from: ch.from, to: ch.to }, ch.kind, true).run()}
               >
                 ✓
               </button>
               <button
                 className="tb-btn"
-                title="Rejeitar"
+                title={t("review.reject")}
                 onClick={() => editor.chain().focus().resolveChange({ from: ch.from, to: ch.to }, ch.kind, false).run()}
               >
                 ✕

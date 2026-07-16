@@ -8,6 +8,7 @@ import {
 import { revealPos } from "./reveal";
 import { arrayOfObjectsEqual } from "../lib/equality";
 import { CAPTION_LABELS, captionKindOf } from "../lib/captionNumbers";
+import { t } from "../lib/i18n";
 
 declare module "@tiptap/core" {
   interface Commands<ReturnType> {
@@ -21,17 +22,23 @@ declare module "@tiptap/core" {
 /** What the block lists: document headings, figure captions or table captions. */
 export type TocKind = "headings" | "figures" | "tables";
 
+// TOC_TITLES é CONTEÚDO do documento (norma acadêmica) e precisa bater com o que
+// o export/PDF gera — fica em pt, NÃO segue o idioma da UI (ver lib/pdf.ts e
+// lib/exportPrep.ts, que geram os mesmos rótulos).
 const TOC_TITLES: Record<TocKind, string> = {
   headings: "Sumário",
   figures: "Lista de Figuras",
   tables: "Lista de Tabelas",
 };
 
-const TOC_EMPTY: Record<TocKind, string> = {
-  headings: "Os títulos do documento aparecem aqui.",
-  figures: "As legendas de figura aparecem aqui.",
-  tables: "As legendas de tabela aparecem aqui.",
-};
+// Chrome do editor (não vai pro documento) → segue o idioma da UI.
+function tocEmpty(kind: TocKind): string {
+  return kind === "figures"
+    ? t("toc.emptyFigures")
+    : kind === "tables"
+      ? t("toc.emptyTables")
+      : t("toc.emptyHeadings");
+}
 
 function tocKindOf(value: string | null): TocKind {
   return value === "figures" || value === "tables" ? value : "headings";
@@ -62,14 +69,14 @@ function TocView({ editor, node }: NodeViewProps) {
         if (n.type.name === "footnotes") return false;
         if (kind === "headings") {
           if (n.type.name !== "heading") return true;
-          out.push({ level: n.attrs.level, text: n.textContent || "(sem título)", pos });
+          out.push({ level: n.attrs.level, text: n.textContent || t("toc.untitled"), pos });
           return false;
         }
         if (n.type.name !== "caption") return true;
         if (captionKindOf(n.attrs.kind) !== wantCaption) return false;
         counter++;
         const label = `${CAPTION_LABELS[wantCaption]} ${counter}`;
-        out.push({ level: 1, text: `${label} — ${n.textContent || "(sem legenda)"}`, pos });
+        out.push({ level: 1, text: `${label} — ${n.textContent || t("toc.noCaption")}`, pos });
         return false;
       });
       return out;
@@ -82,14 +89,14 @@ function TocView({ editor, node }: NodeViewProps) {
   return (
     <NodeViewWrapper className="toc-block" data-toc={kind === "headings" ? "" : kind} contentEditable={false}>
       <div className="toc-header">{TOC_TITLES[kind]}</div>
-      {entries.length === 0 && <div className="toc-empty">{TOC_EMPTY[kind]}</div>}
+      {entries.length === 0 && <div className="toc-empty">{tocEmpty(kind)}</div>}
       {entries.map((e, i) => (
         <button key={i} className={`toc-entry lvl-${e.level}`} onClick={() => go(e.pos)} title={e.text}>
           <span className="toc-title">{e.text}</span>
         </button>
       ))}
       {entries.length > 0 && (
-        <div className="toc-hint">Números de página são adicionados na impressão/PDF.</div>
+        <div className="toc-hint">{t("toc.hint")}</div>
       )}
     </NodeViewWrapper>
   );

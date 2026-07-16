@@ -7,6 +7,7 @@ import { suggestionPopup } from "./slash/popup";
 import type { SlashItem } from "./slash/items";
 import * as citationStore from "../lib/citationStore";
 import { itemSummary } from "../lib/citationStore";
+import { t } from "../lib/i18n";
 
 declare module "@tiptap/core" {
   interface Commands<ReturnType> {
@@ -35,7 +36,7 @@ function CitationView({ node }: NodeViewProps) {
     <NodeViewWrapper
       as="span"
       className={"citation" + (formatted ? "" : " citation-missing")}
-      title={formatted ? `Citação: ${data.keys.join(", ")}` : "Referência não encontrada na bibliografia"}
+      title={formatted ? t("citation.title", { keys: data.keys.join(", ") }) : t("citation.missing")}
     >
       {formatted ?? citationStore.rawCitationText(data)}
     </NodeViewWrapper>

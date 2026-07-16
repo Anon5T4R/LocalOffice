@@ -1,4 +1,5 @@
 import { Node, mergeAttributes } from "@tiptap/core";
+import { t } from "../lib/i18n";
 
 declare module "@tiptap/core" {
   interface Commands<ReturnType> {
@@ -26,7 +27,7 @@ export const PageBreak = Node.create({
     return [
       "div",
       mergeAttributes(HTMLAttributes, { "data-page-break": "true", class: "page-break" }),
-      ["span", { class: "page-break-label", contenteditable: "false" }, "Quebra de página"],
+      ["span", { class: "page-break-label", contenteditable: "false" }, t("page.breakLabel")],
     ];
   },
 

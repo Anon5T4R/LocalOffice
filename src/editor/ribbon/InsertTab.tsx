@@ -5,6 +5,7 @@ import { Modal } from "../../components/Modal";
 import { listCrossRefTargets, type CrossRefTarget } from "../CrossRef";
 import { HeaderFooterModal } from "../HeaderFooterModal";
 import { Btn } from "./Btn";
+import { t as tr } from "../../lib/i18n";
 
 /** "Inserir": tabelas, imagem, link, quebras, notas, sumário, citações. */
 export function InsertTab({ onInsertImage }: { onInsertImage: () => void }) {
@@ -26,7 +27,7 @@ export function InsertTab({ onInsertImage }: { onInsertImage: () => void }) {
 
   const setLink = () => {
     const prev = editor.getAttributes("link").href ?? "https://";
-    const url = window.prompt("URL do link (vazio para remover):", prev);
+    const url = window.prompt(tr("insert.linkPrompt"), prev);
     if (url === null) return;
     if (url === "") chain().unsetLink().run();
     else chain().extendMarkRange("link").setLink({ href: url }).run();
@@ -37,60 +38,60 @@ export function InsertTab({ onInsertImage }: { onInsertImage: () => void }) {
       <div className="tb-group">
         <Btn
           onClick={() => chain().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}
-          title="Inserir tabela 3×3"
+          title={tr("insert.table")}
           wide
         >
-          ▦ Tabela
+          {tr("insert.tableLabel")}
         </Btn>
-        <Btn onClick={() => chain().addRowAfter().run()} disabled={!s.inTable} title="Adicionar linha">+Lin</Btn>
-        <Btn onClick={() => chain().addColumnAfter().run()} disabled={!s.inTable} title="Adicionar coluna">+Col</Btn>
-        <Btn onClick={() => chain().deleteRow().run()} disabled={!s.inTable} title="Remover linha">−Lin</Btn>
-        <Btn onClick={() => chain().deleteColumn().run()} disabled={!s.inTable} title="Remover coluna">−Col</Btn>
-        <Btn onClick={() => chain().deleteTable().run()} disabled={!s.inTable} title="Excluir tabela">✕Tab</Btn>
+        <Btn onClick={() => chain().addRowAfter().run()} disabled={!s.inTable} title={tr("insert.addRow")}>+Lin</Btn>
+        <Btn onClick={() => chain().addColumnAfter().run()} disabled={!s.inTable} title={tr("insert.addCol")}>+Col</Btn>
+        <Btn onClick={() => chain().deleteRow().run()} disabled={!s.inTable} title={tr("insert.delRow")}>−Lin</Btn>
+        <Btn onClick={() => chain().deleteColumn().run()} disabled={!s.inTable} title={tr("insert.delCol")}>−Col</Btn>
+        <Btn onClick={() => chain().deleteTable().run()} disabled={!s.inTable} title={tr("insert.delTable")}>✕Tab</Btn>
       </div>
       <div className="tb-sep" />
 
       <div className="tb-group">
-        <Btn onClick={onInsertImage} title="Inserir imagem" wide>🖼 Imagem</Btn>
-        <Btn onClick={setLink} active={s.link} title="Inserir/editar link" wide>🔗 Link</Btn>
-        <Btn onClick={() => chain().setHorizontalRule().run()} title="Linha divisória" wide>— Linha</Btn>
-        <Btn onClick={() => chain().setPageBreak().run()} title="Quebra de página (nova página no PDF)" wide>⤓ Quebra</Btn>
+        <Btn onClick={onInsertImage} title={tr("insert.image")} wide>{tr("insert.imageLabel")}</Btn>
+        <Btn onClick={setLink} active={s.link} title={tr("insert.link")} wide>{tr("insert.linkLabel")}</Btn>
+        <Btn onClick={() => chain().setHorizontalRule().run()} title={tr("insert.hr")} wide>{tr("insert.hrLabel")}</Btn>
+        <Btn onClick={() => chain().setPageBreak().run()} title={tr("insert.pageBreak")} wide>{tr("insert.pageBreakLabel")}</Btn>
         <Btn
           onClick={() => setShowHeaderFooter(true)}
-          title="Cabeçalho e rodapé da página (também: duplo clique na margem da página)"
+          title={tr("layout.headerFooter")}
           wide
         >
-          ▤ Cabeçalho
+          {tr("insert.headerLabel")}
         </Btn>
-        <Btn onClick={() => chain().addFootnote().run()} title="Nota de rodapé (Ctrl+Alt+F)" wide>⁺ Nota</Btn>
-        <Btn onClick={() => chain().insertMath().run()} title='Equação LaTeX (ou digite "$x$" no texto)' wide>√x Equação</Btn>
-        <Btn onClick={() => chain().insertCaption().run()} title="Legenda numerada para a figura/tabela selecionada" wide>🏷 Legenda</Btn>
-        <Btn onClick={() => chain().insertTableOfContents().run()} title="Sumário (índice dos títulos, com páginas no PDF)" wide>☰ Sumário</Btn>
-        <Btn onClick={() => chain().insertTableOfContents("figures").run()} title="Lista de figuras (com páginas no PDF)" wide>🖼☰ L.Fig</Btn>
-        <Btn onClick={() => chain().insertTableOfContents("tables").run()} title="Lista de tabelas (com páginas no PDF)" wide>▦☰ L.Tab</Btn>
+        <Btn onClick={() => chain().addFootnote().run()} title={tr("insert.footnote")} wide>{tr("insert.footnoteLabel")}</Btn>
+        <Btn onClick={() => chain().insertMath().run()} title={tr("insert.math")} wide>{tr("insert.mathLabel")}</Btn>
+        <Btn onClick={() => chain().insertCaption().run()} title={tr("insert.caption")} wide>{tr("insert.captionLabel")}</Btn>
+        <Btn onClick={() => chain().insertTableOfContents().run()} title={tr("insert.toc")} wide>{tr("insert.tocLabel")}</Btn>
+        <Btn onClick={() => chain().insertTableOfContents("figures").run()} title={tr("insert.figList")} wide>{tr("insert.figListLabel")}</Btn>
+        <Btn onClick={() => chain().insertTableOfContents("tables").run()} title={tr("insert.tabList")} wide>{tr("insert.tabListLabel")}</Btn>
         <Btn
           onClick={() => setRefTargets(listCrossRefTargets(editor.state.doc))}
-          title="Referência cruzada a título, figura ou tabela"
+          title={tr("insert.crossref")}
           wide
         >
-          ↪ Ref.
+          {tr("insert.crossrefLabel")}
         </Btn>
-        <Btn onClick={() => chain().insertContent("[@").run()} title='Citação bibliográfica (ou digite "[@")' wide>❞ Citação</Btn>
-        <Btn onClick={() => chain().insertBibliography().run()} title="Lista de referências das obras citadas" wide>📚 Refs</Btn>
-        <Btn onClick={() => chain().toggleCodeBlock().run()} active={s.codeBlock} title="Bloco de código" wide>{"{ } Código"}</Btn>
+        <Btn onClick={() => chain().insertContent("[@").run()} title={tr("insert.citation")} wide>{tr("insert.citationLabel")}</Btn>
+        <Btn onClick={() => chain().insertBibliography().run()} title={tr("insert.refs")} wide>{tr("insert.refsLabel")}</Btn>
+        <Btn onClick={() => chain().toggleCodeBlock().run()} active={s.codeBlock} title={tr("insert.codeBlock")} wide>{tr("insert.codeBlockLabel")}</Btn>
       </div>
 
       {showHeaderFooter && <HeaderFooterModal onClose={() => setShowHeaderFooter(false)} />}
       {refTargets && (
         <Modal
-          title="Inserir referência cruzada"
+          title={tr("insert.crossrefModalTitle")}
           onClose={() => setRefTargets(null)}
           boxStyle={{ maxHeight: "60vh" }}
         >
           <div className="modal-body">
             {refTargets.length === 0 && (
               <p className="crossref-picker-empty">
-                Nenhum alvo disponível — crie títulos ou legendas de figura/tabela primeiro.
+                {tr("insert.crossrefEmpty")}
               </p>
             )}
             {refTargets.map((t) => (
@@ -103,7 +104,7 @@ export function InsertTab({ onInsertImage }: { onInsertImage: () => void }) {
                 }}
               >
                 <strong>{t.label}</strong>
-                <span>{t.text || "(sem texto)"}</span>
+                <span>{t.text || tr("insert.crossrefNoText")}</span>
               </button>
             ))}
           </div>

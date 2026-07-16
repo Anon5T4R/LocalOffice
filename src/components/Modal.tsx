@@ -1,5 +1,6 @@
 import { useRef, type CSSProperties, type ReactNode } from "react";
 import { useFocusTrap } from "../hooks/useFocusTrap";
+import { t } from "../lib/i18n";
 
 interface ModalProps {
   title: string;
@@ -30,7 +31,7 @@ export function Modal({ title, onClose, children, boxStyle }: ModalProps) {
       >
         <div className="modal-header">
           <strong>{title}</strong>
-          <button className="tb-btn" onClick={onClose} title="Fechar (Esc)">✕</button>
+          <button className="tb-btn" onClick={onClose} title={t("common.close")}>✕</button>
         </div>
         {children}
       </div>

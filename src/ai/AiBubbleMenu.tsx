@@ -2,7 +2,8 @@ import { useState } from "react";
 import { Editor } from "@tiptap/react";
 import { BubbleMenu } from "@tiptap/react/menus";
 import { LocalAi } from "./useLocalAi";
-import { TRANSLATE_LANGS, TONES } from "./actions";
+import { translateLangs, tones } from "./actions";
+import { t } from "../lib/i18n";
 
 interface Props {
   editor: Editor;
@@ -32,30 +33,30 @@ export function AiBubbleMenu({ editor, ai, onOpenPanel }: Props) {
       className="ai-bubble"
     >
       {!ai.ready ? (
-        <span className="ai-bubble-hint">Inicie a IA no painel ✦</span>
+        <span className="ai-bubble-hint">{t("aiBubble.startHint")}</span>
       ) : sub === "translate" ? (
         <>
           <button className="ai-bubble-btn" onClick={() => setSub(null)}>←</button>
-          {TRANSLATE_LANGS.map((l) => (
+          {translateLangs().map((l) => (
             <button key={l} className="ai-bubble-btn" onClick={() => run("translate", l)}>{l}</button>
           ))}
         </>
       ) : sub === "tone" ? (
         <>
           <button className="ai-bubble-btn" onClick={() => setSub(null)}>←</button>
-          {TONES.map((t) => (
-            <button key={t} className="ai-bubble-btn" onClick={() => run("tone", t)}>{t}</button>
+          {tones().map((tone) => (
+            <button key={tone} className="ai-bubble-btn" onClick={() => run("tone", tone)}>{tone}</button>
           ))}
         </>
       ) : (
         <>
-          <button className="ai-bubble-btn" onClick={() => run("rewrite")}>Reescrever</button>
-          <button className="ai-bubble-btn" onClick={() => run("review")}>Revisar</button>
-          <button className="ai-bubble-btn" onClick={() => run("summarize")}>Resumir</button>
-          <button className="ai-bubble-btn" onClick={() => setSub("translate")}>Traduzir ▾</button>
-          <button className="ai-bubble-btn" onClick={() => setSub("tone")}>Tom ▾</button>
-          <button className="ai-bubble-btn" onClick={() => run("bullets")}>Tópicos</button>
-          <button className="ai-bubble-btn" onClick={() => run("continue")}>Continuar</button>
+          <button className="ai-bubble-btn" onClick={() => run("rewrite")}>{t("aiBubble.rewrite")}</button>
+          <button className="ai-bubble-btn" onClick={() => run("review")}>{t("aiBubble.review")}</button>
+          <button className="ai-bubble-btn" onClick={() => run("summarize")}>{t("aiBubble.summarize")}</button>
+          <button className="ai-bubble-btn" onClick={() => setSub("translate")}>{t("aiBubble.translate")}</button>
+          <button className="ai-bubble-btn" onClick={() => setSub("tone")}>{t("aiBubble.tone")}</button>
+          <button className="ai-bubble-btn" onClick={() => run("bullets")}>{t("aiBubble.bullets")}</button>
+          <button className="ai-bubble-btn" onClick={() => run("continue")}>{t("aiBubble.continue")}</button>
         </>
       )}
     </BubbleMenu>
