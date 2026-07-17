@@ -1,7 +1,15 @@
 import { DEFAULT_MODELS_DIR } from "./ai";
 import { DEFAULT_MARGINS } from "./pageGeometry";
 
-export type Theme = "auto" | "light" | "dark";
+export type Theme =
+  | "auto"
+  | "light"
+  | "dark"
+  | "nature"
+  | "darkblue"
+  | "calmgreen"
+  | "pastelpink"
+  | "punkprincess";
 export type PageFormat = "classic" | "a4" | "a5" | "letter" | "a3";
 
 export interface PageMargins {
