@@ -1,6 +1,6 @@
 [package]
 name = "writer"
-version = "0.16.0"
+version = "0.16.1"
 description = "A Tauri App"
 authors = ["you"]
 edition = "2021"
@@ -31,5 +31,12 @@ ttf-parser = "0.24"
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-single-instance = "2"
+
+[target.'cfg(windows)'.dependencies]
+# Para desligar as "browser accelerator keys" do WebView2 (a barra nativa de
+# Localizar do Ctrl+F varre a UI inteira e ignora o preventDefault do JS).
+# Mesmas versões que o wry/tauri já trazem — não adiciona árvore nova.
+webview2-com = "0.38"
+windows-core = "0.61"
 
 
