@@ -30,7 +30,7 @@ if (Test-Path $target) {
     exit 0
 }
 
-$url = "https://github.com/jgm/pandoc/releases/download/$pdVersion/$pdAsset"
+$url = "https://github.com/Anon5T4R/Local-runtimes/releases/download/v1/$pdAsset"
 Write-Host "Baixando $url ..."
 $zip = Join-Path $env:TEMP $pdAsset
 Invoke-WebRequest -Uri $url -OutFile $zip

