@@ -64,11 +64,19 @@ jobs:
         working-directory: src-tauri
         run: cargo fetch --locked
 
+      # A tagName so e preenchida em build de TAG. Fora de tag, `github.ref_name`
+      # e o nome do BRANCH -- um `workflow_dispatch` da main criava uma release
+      # chamada "main": lixo no repositorio, com o nome errado.
+      #
+      # O gate vai na tagName, NAO no passo: o tauri-action e quem CONSTROI o
+      # app, nao so quem publica. Gatear o passo inteiro faria o disparo manual
+      # nao buildar nada. Sem tagName o action so builda e sobe os artefatos --
+      # que e exatamente o que um build de teste deve fazer.
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: ${{ github.ref_name }}
+          tagName: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
           releaseName: "LocalOffice ${{ github.ref_name }}"
           releaseBody: "Instaladores para Windows e Linux abaixo. Modelos GGUF não inclusos."
           releaseDraft: false
