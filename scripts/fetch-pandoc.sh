@@ -3,6 +3,17 @@
 # Uso: bash scripts/fetch-pandoc.sh
 set -euo pipefail
 
+# ---------------------------------------------------------------------------
+# VERSÃO FIXA + SHA256 (2026-07-18) — ver o comentário no fetch-pandoc.ps1.
+# Resumo: era `releases/latest`; cada build embarcava uma versão diferente, sem
+# verificação. No pandoc isso pesa mais que nos outros binários, porque mudança
+# de versão pode mudar o RESULTADO da conversão de DOCX/ODT do usuário.
+# PRA ATUALIZAR: trocar as constantes aqui E no .ps1, sempre na MESMA versão.
+# ---------------------------------------------------------------------------
+PD_VERSION="3.10"
+PD_ASSET="pandoc-3.10-linux-amd64.tar.gz"
+PD_SHA256="e0f8af62d0f267d22baa5bcefe6d5dda3a097ccc60de794b759fe03159923244"
+
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BIN_DIR="$ROOT/src-tauri/binaries"
 TARGET="$BIN_DIR/pandoc-x86_64-unknown-linux-gnu"
@@ -13,17 +24,28 @@ if [ -f "$TARGET" ]; then
   exit 0
 fi
 
-echo "Buscando release mais recente do pandoc..."
-URL=$(curl -fsSL https://api.github.com/repos/jgm/pandoc/releases/latest \
-  | grep browser_download_url | grep 'linux-amd64.tar.gz' | head -1 | cut -d'"' -f4)
-[ -z "$URL" ] && { echo "asset linux-amd64 não encontrado"; exit 1; }
+URL="https://github.com/jgm/pandoc/releases/download/$PD_VERSION/$PD_ASSET"
+echo "Baixando $URL ..."
+curl -fsSL --retry 3 --retry-delay 2 "$URL" -o /tmp/pandoc.tar.gz
 
-echo "Baixando $URL"
-curl -fsSL "$URL" -o /tmp/pandoc.tar.gz
+# Confere ANTES de extrair: binário adulterado não chega a ser descompactado.
+GOT=$(sha256sum /tmp/pandoc.tar.gz | cut -d' ' -f1)
+if [ "$GOT" != "$PD_SHA256" ]; then
+  rm -f /tmp/pandoc.tar.gz
+  echo "SHA256 NAO BATE!" >&2
+  echo "  esperado: $PD_SHA256" >&2
+  echo "  recebido: $GOT" >&2
+  echo "Download corrompido ou adulterado. Nada foi instalado." >&2
+  exit 1
+fi
+echo "sha256 conferido: $GOT"
+
+rm -rf /tmp/pandoc-extract
 mkdir -p /tmp/pandoc-extract
 tar xzf /tmp/pandoc.tar.gz -C /tmp/pandoc-extract
 PANDOC=$(find /tmp/pandoc-extract -type f -name pandoc -path '*bin*' | head -1)
+[ -z "$PANDOC" ] && { echo "pandoc não encontrado no tarball ($PD_VERSION)"; exit 1; }
 cp "$PANDOC" "$TARGET"
 chmod +x "$TARGET"
 rm -rf /tmp/pandoc.tar.gz /tmp/pandoc-extract
-echo "Instalado: $TARGET"
+echo "Instalado: $TARGET ($PD_VERSION)"
