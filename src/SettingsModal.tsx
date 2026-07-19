@@ -6,6 +6,7 @@ import { useSettings } from "./state/SettingsContext";
 import { Modal } from "./components/Modal";
 import { LocalePicker } from "./components/LocalePicker";
 import { t } from "./lib/i18n";
+import { pushToast } from "./lib/toastStore";
 
 // Nomes de estilo (ABNT/APA/Chicago/IEEE) e styleId são de norma/domínio — NÃO
 // traduzidos. Só o rótulo da opção "custom" é de UI.
@@ -33,7 +34,7 @@ export function SettingsModal({ onClose, onOpenHeaderFooter }: SettingsModalProp
       const selected = await openDialog({ multiple: false, filters });
       if (selected && !Array.isArray(selected)) apply(selected);
     } catch (e) {
-      window.alert(t("settings.filePickerError", { e: String(e) }));
+      pushToast("error", t("settings.filePickerError", { e: String(e) }));
     }
   };
 

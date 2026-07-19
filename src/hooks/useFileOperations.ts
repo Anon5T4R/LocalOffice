@@ -9,6 +9,7 @@ import { chromeRange, effectiveLayout, type DocLayout } from "../editor/DocLayou
 import { getBreakOffsets, getPageCount } from "../editor/PageBreaks";
 import type { SavableTab } from "./useDocumentTabs";
 import { t } from "../lib/i18n";
+import { pushToast } from "../lib/toastStore";
 
 interface FileOperationsDeps {
   editorRef: RefObject<Editor | null>;
@@ -41,7 +42,7 @@ export function useFileOperations({
       const doc = await openDocument();
       if (doc) openDocFile(doc);
     } catch (e) {
-      window.alert(t("file.openError", { e: String(e) }));
+      pushToast("error", t("file.openError", { e: String(e) }));
     }
   }, [openDocFile]);
 
@@ -50,7 +51,7 @@ export function useFileOperations({
       try {
         openDocFile(await openDocumentPath(path));
       } catch (e) {
-        window.alert(t("file.openError", { e: String(e) }));
+        pushToast("error", t("file.openError", { e: String(e) }));
       }
     },
     [openDocFile]
@@ -71,7 +72,7 @@ export function useFileOperations({
         cancelAutosave();
       }
     } catch (e) {
-      window.alert(t("file.saveError", { e: String(e) }));
+      pushToast("error", t("file.saveError", { e: String(e) }));
     }
   }, [editorRef, tabsRef, activeIdRef, setTabs, remember, cancelAutosave, settings]);
 
@@ -90,7 +91,7 @@ export function useFileOperations({
       remember(at.filePath);
       cancelAutosave();
     } catch (e) {
-      window.alert(t("file.saveError", { e: String(e) }));
+      pushToast("error", t("file.saveError", { e: String(e) }));
     }
   }, [editorRef, tabsRef, activeIdRef, handleSaveAs, queueSave, remember, cancelAutosave, settings]);
 

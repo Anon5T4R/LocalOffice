@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import type { CustomFont, Settings } from "../lib/settings";
+import { t } from "../lib/i18n";
+import { pushToast } from "../lib/toastStore";
 
 const FONT_MIME: Record<string, string> = {
   ttf: "font/ttf",
@@ -70,7 +72,7 @@ export function useCustomFonts(
         updateSettings({ customFonts: next });
       }
     } catch (e) {
-      window.alert(`Não foi possível importar a fonte:\n${e}`);
+      pushToast("error", t("home.importFontError", { e: String(e) }));
     }
   }, [customFonts, updateSettings]);
 

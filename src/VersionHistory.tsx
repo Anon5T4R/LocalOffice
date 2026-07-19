@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { Tab } from "./lib/tabs";
 import { Modal } from "./components/Modal";
 import { t, localeTag } from "./lib/i18n";
+import { pushToast } from "./lib/toastStore";
 
 interface VersionData {
   id: string;
@@ -65,7 +66,7 @@ export function VersionHistory({ tab, onClose, onSaveVersion, onRestoreVersion }
         await invoke("delete_version", { docPath: tab.filePath, versionId: id });
         await load();
       } catch (e) {
-        window.alert(t("version.deleteError", { e: String(e) }));
+        pushToast("error", t("version.deleteError", { e: String(e) }));
       }
     },
     [tab.filePath, load]

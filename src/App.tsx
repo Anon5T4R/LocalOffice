@@ -33,6 +33,8 @@ import { effectiveLayoutFor, patchDocLayout, type DocLayout } from "./editor/Doc
 import { recomputePageChrome } from "./editor/PageBreaks";
 import { docStylesCss } from "./lib/docStyles";
 import { t } from "./lib/i18n";
+import { pushToast } from "./lib/toastStore";
+import { Toasts } from "./components/Toasts";
 import "./editor/contentStyles";
 import "./App.css";
 
@@ -231,14 +233,14 @@ function App() {
       if (!editor) return;
       const at = tabsRef.current.find((t) => t.id === activeIdRef.current);
       if (!at || !at.filePath) {
-        window.alert(t("version.saveBeforeVersion"));
+        pushToast("info", t("version.saveBeforeVersion"));
         return;
       }
       try {
         const content = JSON.stringify(editor.getJSON());
         await invoke("save_version", { docPath: at.filePath, name, content });
       } catch (e) {
-        window.alert(t("version.saveError", { e: String(e) }));
+        pushToast("error", t("version.saveError", { e: String(e) }));
       }
     },
     [editor]
@@ -262,7 +264,7 @@ function App() {
         const restoredLayout = (editor.state.doc.attrs.layout as DocLayout | null) ?? null;
         queueSave({ id: at.id, filePath: at.filePath, format: at.format }, editor.getHTML(), restoredLayout).catch(() => {});
       } catch (e) {
-        window.alert(t("version.restoreError", { e: String(e) }));
+        pushToast("error", t("version.restoreError", { e: String(e) }));
       }
     },
     [editor, noteEdit, setTabs, queueSave, tabsRef, activeIdRef]
@@ -378,6 +380,7 @@ function App() {
       {printJob && (
         <PrintPreview html={printJob.html} options={printJob.options} onClose={() => setPrintJob(null)} />
       )}
+      <Toasts />
     </div>
   );
 }
