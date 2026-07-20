@@ -82,6 +82,8 @@ Todo o software é **open-source**. Sinta-se à vontade para usar, adaptar e con
 
 ## 📄 Licença
 
-Código sob licença **GNU AGPL-3.0** (veja [LICENSE](LICENSE)) — copyleft forte: se você rodar uma versão modificada como serviço de rede, é obrigado a disponibilizar o código-fonte dela aos usuários. Relicenciado a partir da MIT em 2026 para permitir a incorporação de componentes AGPL (ex.: conversor `x2t` do OnlyOffice).
+Código sob licença **GNU AGPL-3.0** (veja [LICENSE](LICENSE)) — copyleft forte: se você rodar uma versão modificada como serviço de rede, é obrigado a disponibilizar o código-fonte dela aos usuários. Relicenciado a partir da MIT em 2026 **antecipando** a incorporação de componentes AGPL — o caso concreto era o conversor `x2t` do OnlyOffice, que acabou **testado e descartado** (ver `plano.md`, "Decisões fixadas"). Ou seja: **nenhum código AGPL de terceiro entrou até hoje**; a AGPL aqui é uma escolha deliberada de licenciamento, não uma obrigação herdada.
 
-Os binários de terceiros embarcados no instalador mantêm suas próprias licenças: [pandoc](https://github.com/jgm/pandoc) (GPL-2.0+) e [llama.cpp](https://github.com/ggml-org/llama.cpp) (MIT), distribuídos sem modificação.
+Os binários de terceiros embarcados no instalador mantêm suas próprias licenças: [pandoc](https://github.com/jgm/pandoc) (**GPL-2.0-or-later**) e [llama.cpp](https://github.com/ggml-org/llama.cpp) (**MIT**), ambos em builds **não modificadas**.
+
+Os dois rodam como **processo separado** (sidecar), invocados por linha de comando — o código do app não faz linkagem com eles, então são obras *agregadas* no mesmo instalador e cada licença vale por si. O que a redistribuição exige é acompanhar o texto das licenças, a procedência e a oferta de código-fonte do pandoc: está em `src-tauri/third-party/` (`LEIAME.txt`, `COPYING-pandoc-GPL-2.0.txt`, `COPYRIGHT-pandoc.txt`, `LICENSE-llama.cpp.txt`), que vai dentro do instalador. O tarball Linux oficial do pandoc não traz os arquivos de licença, por isso as cópias são versionadas aqui em vez de extraídas do download.

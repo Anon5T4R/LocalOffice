@@ -1,0 +1,53 @@
+Binários de terceiros distribuídos com o LocalOffice
+====================================================
+
+O LocalOffice é software livre sob a GNU AGPL-3.0-or-later (veja o LICENSE na
+raiz do repositório). O instalador acompanha dois programas de terceiros, ambos
+em builds NÃO MODIFICADAS. Cada um mantém a sua própria licença — o que segue
+cumpre as obrigações de quem redistribui esses binários.
+
+Os dois rodam como PROCESSO SEPARADO (sidecar), invocados por linha de comando.
+O código do LocalOffice não faz linkagem com nenhum deles: as obras são apenas
+agregadas no mesmo instalador.
+
+
+1) pandoc — GPL-2.0-or-later
+----------------------------
+Conversor de DOCX/ODT/RTF.
+
+  versão ............ 3.10
+  fonte ............. https://github.com/jgm/pandoc (tag 3.10)
+  build original .... https://github.com/jgm/pandoc/releases/tag/3.10
+  espelho ........... https://github.com/Anon5T4R/Local-runtimes (release v1)
+  sha256 (win) ...... bb808d00fd58762299d64582a9b4c3e4b106cd929e62c5f19bcdcb496f1e54ae
+
+  Texto da licença .. COPYING-pandoc-GPL-2.0.txt (cópia do COPYING.md da tag 3.10)
+  Avisos de copyright  COPYRIGHT-pandoc.txt (arquivo oficial da distribuição
+                       binária do pandoc; lista também as bibliotecas embutidas
+                       nele e as licenças delas)
+
+  OFERTA DE CÓDIGO-FONTE (GPL-2.0, seção 3)
+  O código-fonte correspondente a esta versão do pandoc está publicamente
+  disponível em https://github.com/jgm/pandoc na tag 3.10. Se preferir recebê-lo
+  por outro meio, abra uma issue em https://github.com/Anon5T4R/LocalOffice e
+  ele será fornecido.
+
+  O tarball Linux oficial do pandoc NÃO traz os arquivos de licença (o zip do
+  Windows traz). Por isso as cópias vivem aqui, versionadas: assim o instalador
+  sai completo nas duas plataformas, e não conforme o que o arquivo baixado
+  resolveu incluir.
+
+
+2) llama.cpp — MIT
+------------------
+Runtime de inferência local (llama-server).
+
+  tag do upstream ... b10066
+  fonte ............. https://github.com/ggml-org/llama.cpp (tag b10066)
+  espelho ........... https://github.com/Anon5T4R/Local-runtimes (release v1)
+  sha256 (win) ...... 57cb5dd3143b2814b8d1d14587867628bfb126536abfa7085ca9560c4919d998
+
+  Texto da licença .. LICENSE-llama.cpp.txt
+
+  A MIT exige que o aviso de copyright acompanhe as cópias do software. Os zips
+  de release do llama.cpp não incluem o LICENSE, então a cópia fica aqui.

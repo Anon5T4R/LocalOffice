@@ -39,7 +39,7 @@
       }
     },
     "externalBin": ["binaries/pandoc"],
-    "resources": ["binaries/llama/*"],
+    "resources": ["binaries/llama/*", "third-party/*"],
     "fileAssociations": [
       {
         "ext": ["md", "markdown", "txt", "html", "htm", "docx", "odt"],
