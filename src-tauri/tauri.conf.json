@@ -46,7 +46,7 @@
         "name": "Documento",
         "description": "Documento de texto do LocalOffice",
         "role": "Editor",
-        "mimeType": "text/markdown,text/plain,text/html,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.oasis.opendocument.text"
+        "mimeType": "text/markdown;text/plain;text/html;application/vnd.openxmlformats-officedocument.wordprocessingml.document;application/vnd.oasis.opendocument.text"
       }
     ],
     "icon": [
