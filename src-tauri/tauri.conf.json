@@ -45,7 +45,8 @@
         "ext": ["md", "markdown", "txt", "html", "htm", "docx", "odt"],
         "name": "Documento",
         "description": "Documento de texto do LocalOffice",
-        "role": "Editor"
+        "role": "Editor",
+        "mimeType": "text/markdown,text/plain,text/html,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.oasis.opendocument.text"
       }
     ],
     "icon": [
