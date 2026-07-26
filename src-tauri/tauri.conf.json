@@ -40,6 +40,11 @@
     },
     "externalBin": ["binaries/pandoc"],
     "resources": ["binaries/llama/*", "third-party/*"],
+    "linux": {
+      "deb": {
+        "desktopTemplate": "desktop-entry.desktop"
+      }
+    },
     "fileAssociations": [
       {
         "ext": ["md", "markdown", "txt", "html", "htm", "docx", "odt"],
