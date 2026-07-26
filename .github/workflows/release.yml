@@ -82,7 +82,7 @@ jobs:
       # que o CI nunca ve, porque o CI e justamente a distro onde funciona.
       # Ver Anon5T4R/linux-packaging.
       - name: Consertar o AppImage para outras distros
-        if: contains(matrix.bundles, 'appimage')
+        if: runner.os == 'Linux'
         uses: Anon5T4R/linux-packaging/fix-appimage@v1
         with:
           path: src-tauri/target/release/bundle/appimage
