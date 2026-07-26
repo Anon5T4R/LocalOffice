@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { markdownToHtml, htmlToMarkdown, fieldsFromPandoc, mathFromPandoc, stripFootnoteBackrefs } from "./markdown";
+import { inlineRelativeImagesFromDisk } from "./localImages";
 import { bakeCitationsHtml } from "./citationStore";
 import { bakeHeadingNumbers, detectManualNumberingSequence, stripBakedHeadingNumbers } from "./bakedHeadingNumbers";
 import { bakeCaptionNumbers } from "./captionNumbers";
@@ -116,7 +117,12 @@ async function readToHtml(path: string, format: DocFormat): Promise<{ html: stri
   }
   const rawFile = await invoke<string>("read_text_file", { path });
   const { raw, layout } = extractLayout(rawFile);
-  const html = format === "markdown" ? await markdownToHtml(raw) : raw;
+  let html = format === "markdown" ? await markdownToHtml(raw) : raw;
+  // Imagem de caminho relativo (`_attachments/foto.jpg`, como o OpenObsidian
+  // escreve) não tem contra o que resolver dentro do webview — vira ícone
+  // quebrado. Resolver contra a pasta do arquivo e embutir como `data:` é o
+  // mesmo caminho que o app já usa pra imagem inserida.
+  html = await inlineRelativeImagesFromDisk(html, path);
   // Heading numbers baked into the file by an export must come back out, or
   // the editor's decorations double them. Unmarked text prefixes (DOCX loses
   // the marker span) are only stripped while automatic numbering is on — with
