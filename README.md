@@ -35,9 +35,9 @@ LocalOffice é um editor de documentos focado em privacidade e simplicidade. Tud
     
 -   **TipTap** — editor
     
--   **pandoc** (sidecar) — conversão DOCX/ODT
+-   **pandoc** (binário embarcado, processo separado) — conversão DOCX/ODT
     
--   **llama.cpp** (`llama-server`, sidecar) — IA local
+-   **llama.cpp** (`llama-server`, binário embarcado, processo separado) — IA local
     
 
 ## 🚀 Rodando em desenvolvimento
@@ -86,4 +86,4 @@ Código sob licença **GNU AGPL-3.0** (veja [LICENSE](LICENSE)) — copyleft for
 
 Os binários de terceiros embarcados no instalador mantêm suas próprias licenças: [pandoc](https://github.com/jgm/pandoc) (**GPL-2.0-or-later**) e [llama.cpp](https://github.com/ggml-org/llama.cpp) (**MIT**), ambos em builds **não modificadas**.
 
-Os dois rodam como **processo separado** (sidecar), invocados por linha de comando — o código do app não faz linkagem com eles, então são obras *agregadas* no mesmo instalador e cada licença vale por si. O que a redistribuição exige é acompanhar o texto das licenças, a procedência e a oferta de código-fonte do pandoc: está em `src-tauri/third-party/` (`LEIAME.txt`, `COPYING-pandoc-GPL-2.0.txt`, `COPYRIGHT-pandoc.txt`, `LICENSE-llama.cpp.txt`), que vai dentro do instalador. O tarball Linux oficial do pandoc não traz os arquivos de licença, por isso as cópias são versionadas aqui em vez de extraídas do download.
+Os dois rodam como **processo separado**, invocados por linha de comando — o código do app não faz linkagem com eles, então são obras *agregadas* no mesmo instalador e cada licença vale por si. O que a redistribuição exige é acompanhar o texto das licenças, a procedência e a oferta de código-fonte do pandoc: está em `src-tauri/third-party/` (`LEIAME.txt`, `COPYING-pandoc-GPL-2.0.txt`, `COPYRIGHT-pandoc.txt`, `LICENSE-llama.cpp.txt`), que vai dentro do instalador. O tarball Linux oficial do pandoc não traz os arquivos de licença, por isso as cópias são versionadas aqui em vez de extraídas do download.

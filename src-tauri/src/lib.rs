@@ -47,7 +47,6 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_shell::init())
         .manage(Mutex::new(LlmState::default()))
         .manage(VersionStore::default())
         // Ctrl+F: o WebView2 tem uma barra nativa de "Localizar na página" que

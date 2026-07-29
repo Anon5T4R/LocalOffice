@@ -48,14 +48,14 @@ jobs:
       - name: Instalar deps do frontend
         run: npm ci
 
-      - name: Baixar sidecars (Windows)
+      - name: Baixar runtimes (Windows)
         if: matrix.platform == 'windows-latest'
         shell: pwsh
         run: |
           powershell -ExecutionPolicy Bypass -File scripts/fetch-pandoc.ps1
           powershell -ExecutionPolicy Bypass -File scripts/fetch-llama.ps1
 
-      - name: Baixar sidecars (Linux)
+      - name: Baixar runtimes (Linux)
         if: matrix.platform == 'ubuntu-22.04'
         run: |
           bash scripts/fetch-pandoc.sh
@@ -96,10 +96,9 @@ jobs:
           deb: src-tauri/target/release/bundle/deb
           license: AGPL3
           description: 'Editor de documentos 100% offline com IA local'
-          # O pandoc embutido cai em /usr/bin/pandoc, que e o arquivo do pacote
-          # `pandoc` do Arch — `pacman -U` recusaria por conflito. Sai do pacote
-          # e vira dependencia; o caminho nao muda, entao o sidecar segue achando.
-          system-bins: pandoc
+          # (v0.17.0: o pandoc deixou de ser sidecar/externalBin e virou
+          # resource — nao cai mais em /usr/bin, entao o `system-bins: pandoc`
+          # que resolvia a colisao com o pacote do Arch saiu junto.)
 
       # Junta o que saiu num lugar só. Se o instalador não estiver aqui, o
       # release para AGORA, com a mensagem certa — e não daqui a 15 minutos

@@ -1,5 +1,7 @@
-# Baixa o pandoc (Windows x86_64) e instala como sidecar do Tauri em
-# src-tauri/binaries/pandoc-x86_64-pc-windows-msvc.exe.
+# Baixa o pandoc (Windows x86_64) e instala como RESOURCE do Tauri em
+# src-tauri/binaries/pandoc/pandoc.exe (era sidecar/externalBin: no Linux o
+# Tauri instalava o binário em /usr/bin/pandoc, que colide com o pacote
+# `pandoc` do Arch — resource vai pro diretório do app, sem conflito).
 # Uso: powershell -ExecutionPolicy Bypass -File scripts/fetch-pandoc.ps1
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
@@ -21,12 +23,12 @@ $pdAsset = "pandoc-3.10-windows-x86_64.zip"
 $pdSha256 = "bb808d00fd58762299d64582a9b4c3e4b106cd929e62c5f19bcdcb496f1e54ae"
 
 $root = Split-Path -Parent $PSScriptRoot
-$binDir = Join-Path $root "src-tauri\binaries"
-$target = Join-Path $binDir "pandoc-x86_64-pc-windows-msvc.exe"
+$binDir = Join-Path $root "src-tauri\binaries\pandoc"
+$target = Join-Path $binDir "pandoc.exe"
 New-Item -ItemType Directory -Force -Path $binDir | Out-Null
 
 if (Test-Path $target) {
-    Write-Host "pandoc sidecar já existe em $target"
+    Write-Host "pandoc já existe em $target"
     exit 0
 }
 

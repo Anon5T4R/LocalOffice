@@ -1,16 +1,57 @@
-use tauri_plugin_shell::ShellExt;
+use std::path::PathBuf;
+use std::process::Command;
+use tauri::Manager;
 
-/// Run the bundled pandoc sidecar with `args` and return its stdout.
+/// Platform-specific name of the bundled pandoc binary.
+const PANDOC_BIN: &str = if cfg!(windows) { "pandoc.exe" } else { "pandoc" };
+
+/// Locate the bundled pandoc. Dev: cwd/binaries/pandoc. Prod: Tauri resource dir.
+///
+/// pandoc is a RESOURCE (same shape as resolve_llama_server in llm.rs), not a
+/// sidecar: externalBin lands in /usr/bin on the Linux packages, where it
+/// collides with the distro's own `pandoc` package.
+fn resolve_pandoc(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let rel = format!("binaries/pandoc/{}", PANDOC_BIN);
+    let mut candidates: Vec<PathBuf> = Vec::new();
+    if let Ok(cwd) = std::env::current_dir() {
+        candidates.push(cwd.join(&rel));
+    }
+    if let Ok(res) = app.path().resource_dir() {
+        candidates.push(res.join(&rel));
+        candidates.push(res.join(format!("pandoc/{}", PANDOC_BIN)));
+    }
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            candidates.push(dir.join(&rel));
+            candidates.push(dir.join(format!("pandoc/{}", PANDOC_BIN)));
+        }
+    }
+    for c in candidates {
+        if c.exists() {
+            return Ok(c);
+        }
+    }
+    Err("pandoc não encontrado (runtime ausente)".into())
+}
+
+/// Run the bundled pandoc with `args` and return its stdout.
 /// `label` names the operation in error messages ("import", "export", …).
 async fn run_pandoc(app: &tauri::AppHandle, args: &[&str], label: &str) -> Result<String, String> {
-    let output = app
-        .shell()
-        .sidecar("pandoc")
-        .map_err(|e| format!("sidecar pandoc indisponível: {}", e))?
-        .args(args)
-        .output()
-        .await
-        .map_err(|e| format!("falha ao executar pandoc: {}", e))?;
+    let exe = resolve_pandoc(app)?;
+    let args_owned: Vec<String> = args.iter().map(|s| s.to_string()).collect();
+    let output = tokio::task::spawn_blocking(move || {
+        let mut cmd = Command::new(&exe);
+        cmd.args(&args_owned);
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+        }
+        cmd.output()
+    })
+    .await
+    .map_err(|e| format!("falha ao executar pandoc: {}", e))?
+    .map_err(|e| format!("falha ao executar pandoc: {}", e))?;
     if !output.status.success() {
         return Err(format!(
             "pandoc ({}) falhou: {}",
@@ -21,7 +62,7 @@ async fn run_pandoc(app: &tauri::AppHandle, args: &[&str], label: &str) -> Resul
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
-/// Convert a binary document (docx/odt) into editor HTML via the bundled pandoc sidecar.
+/// Convert a binary document (docx/odt) into editor HTML via the bundled pandoc.
 #[tauri::command]
 pub(crate) async fn import_via_pandoc(
     app: tauri::AppHandle,
@@ -69,7 +110,7 @@ pub(crate) async fn import_via_pandoc(
     result
 }
 
-/// Convert a BibTeX/BibLaTeX bibliography into CSL-JSON via the pandoc sidecar.
+/// Convert a BibTeX/BibLaTeX bibliography into CSL-JSON via the bundled pandoc.
 /// (CSL-JSON files are read directly on the JS side; this is only for .bib.)
 #[tauri::command]
 pub(crate) async fn import_bibliography(app: tauri::AppHandle, path: String) -> Result<String, String> {

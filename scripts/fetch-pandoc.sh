@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Baixa o pandoc (Linux amd64) e instala como sidecar do Tauri.
+# Baixa o pandoc (Linux amd64) e instala como RESOURCE do Tauri em
+# src-tauri/binaries/pandoc/pandoc (era sidecar/externalBin: caía em
+# /usr/bin/pandoc no .deb e colidia com o pacote `pandoc` do Arch).
 # Uso: bash scripts/fetch-pandoc.sh
 set -euo pipefail
 
@@ -15,12 +17,12 @@ PD_ASSET="pandoc-3.10-linux-amd64.tar.gz"
 PD_SHA256="e0f8af62d0f267d22baa5bcefe6d5dda3a097ccc60de794b759fe03159923244"
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-BIN_DIR="$ROOT/src-tauri/binaries"
-TARGET="$BIN_DIR/pandoc-x86_64-unknown-linux-gnu"
+BIN_DIR="$ROOT/src-tauri/binaries/pandoc"
+TARGET="$BIN_DIR/pandoc"
 mkdir -p "$BIN_DIR"
 
 if [ -f "$TARGET" ]; then
-  echo "pandoc sidecar já existe em $TARGET"
+  echo "pandoc já existe em $TARGET"
   exit 0
 fi
 
